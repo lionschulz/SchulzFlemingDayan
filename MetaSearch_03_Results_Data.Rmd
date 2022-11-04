@@ -1,0 +1,1014 @@
+---
+title: "Additional Model Analysis & Data"
+output: html_notebook
+---
+
+# About
+
+This file produces additional figures for the results section and appendix:
+* Results:
+  * Fig. 7: Metacognitive accuracy in search
+  * Fig. 9: Simulations and trial by trial analysis of data
+  * Fig. 10: Over- and underconfidence in model and data
+* Appendix:
+  * Fig. B1 and B2: Additional data analysis
+
+# Set-up
+
+We load the necessary libraries and functions
+
+```{r}
+source("backend/global_all.R")
+
+source("backend/data_analysis/metaSTD_functions.R")
+source("backend/data_analysis/data_analysis_functions.R")
+source("backend/models/simulations/simulation_functions.R")
+source("backend/models/secondorder/model_2o_subjective.R")
+source("backend/global_settings.R")
+
+source("backend/hmetad/Function_metad_indiv.R")
+source("backend/hmetad/hmeta_d_wrapper_functions.R")
+
+base_size <- 15
+theme_set(theme_classic(base_size = base_size))
+
+compute_standard_error <- function(x) sd(x)/sqrt(length(x))
+```
+
+We add the libraries 
+
+```{r}
+library(patchwork)
+library(ggnewscale)
+library(scales)
+library(viridis)
+library(RColorBrewer)
+library(colorspace)
+library(arm)
+library(ggpubr)
+library(tidyverse)
+library(msm)
+library(afex)
+library(arm)
+library(conflicted)
+library(rjags)
+library(magrittr)
+
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter","dplyr")
+```
+
+
+
+# Fig. 7: Additional theory - Metacognitive search sensitivity
+
+We first produce the figure showing metacognitive search sensitivity as a function of sigma_I and rho_I. 
+
+We first set the relevant parameters
+
+```{r}
+sI_set <- seq(1,3, by = .5)
+tI_set <- sI_set
+sigma_tau_expand <- expand.grid(sI_set, tI_set)
+```
+
+## Postdecisional model
+
+```{r}
+set.seed(22)
+
+df_for_sensitivity.Pd <- get_simulated_df_with_search_and_meta_metrics(
+  sigma_tau_expand[,1],
+  sigma_tau_expand[,2],
+  sI_subj_vector = FALSE,
+  sF_fix = 1,
+  rS_fix = -.1,
+  model = "Pd",
+  n_total_simulations = 100000,
+  compute_meta_d = FALSE
+)
+```
+
+## Second-order model
+
+```{r}
+df_for_sensitivity.2o <- get_simulated_df_with_search_and_meta_metrics(
+  sigma_tau_expand[,1],
+  sigma_tau_expand[,2],
+  sI_subj_vector = FALSE,
+  rho_fix = 0.3,
+  sF_fix = 1,
+  rS_fix = -.1,
+  model = "2o",
+  compute_meta_d = FALSE
+)
+```
+
+## Plotting
+
+### Function for plotting
+
+```{r}
+plot_search_sensitivty <- function(df, model = "2o"){
+  
+  df <-  df %>% 
+    mutate(sI = as.factor(sI))
+  
+  if (model == "2o") {
+    plot <- df %>% 
+      ggplot(aes(tI, search_ratio, colour = sI, group = sI)) 
+  } else if (model == "Pd"){
+    plot <- df %>% 
+      ggplot(aes(tI, search_ratio_empirical, colour = sI, group = sI)) 
+  }
+  
+  plot <- plot + 
+      geom_point(size = psize) +
+      geom_line(size = lsize) +
+      scale_x_continuous(name = bquote(tau[I]),
+                         breaks = 1:3,
+                         limits = c(.8,3.2)) + 
+      scale_y_continuous(name = "Search Sensitivity",
+                         limits = c(0,2.5),
+                         breaks = 0:2) +
+      geom_hline(yintercept = 0,
+                 alpha= .5,
+                 linetype = "dashed") +
+      scale_color_manual(name = bquote(sigma[I]),
+                         values = rev(palette_for_sigma[1:5])) 
+  
+  return(plot)
+}
+
+pl_sensitivity.2o <- plot_search_sensitivty(df_for_sensitivity.2o)
+pl_sensitivity.2o
+```
+
+### Model plots
+
+```{r}
+pl_sensitivity.Pd <- plot_search_sensitivty(df_for_sensitivity.Pd, model = "Pd") +
+  guides(colour = "none")
+pl_sensitivity.Pd
+pl_sensitivity.2o <- plot_search_sensitivty(df_for_sensitivity.2o)
+pl_sensitivity.2o
+```
+
+### Example plots
+
+```{r}
+dodged_position <- position_dodge(0.2)
+
+df_search_ratio_example <- 
+  data.frame(
+    mock_id = 1,
+    correctness = c("Incorrect", "Correct"),
+    search = c(0.8, .3)
+  )
+
+pl_search_ratio_example_bars <- df_search_ratio_example %>% 
+  mutate(correctness = fct_rev(correctness)) %>%
+  ggplot(aes(x = correctness, y = search)) +
+    geom_col(aes(fill = correctness), 
+               position = dodged_position,
+               # colour = "black",
+             alpha = .9) +  
+    scale_fill_manual(values = c(colour$distribution_incorrect, colour$distribution_correct)) +
+    guides(colour = "none") +
+    scale_x_discrete(name = "Initial Accuracy") +
+    scale_y_continuous(name = "Av. Search",
+                       limits = c(0,1),
+                       breaks = 0:2/2,
+                       expand = c(0,0)) +
+    guides(fill = "none")
+pl_search_ratio_example_bars
+```
+
+### Full plot
+
+```{r, fig.height= 4, fig.width=8.2}
+pl_search_sensitivity_joint <- pl_search_ratio_example_bars + pl_sensitivity.Pd + pl_sensitivity.2o + plot_layout(widths = c(1.2,1.5,1.5))
+pl_search_sensitivity_joint
+```
+
+Saving this plot
+
+```{r, fig.height= 4, fig.width=8.2}
+ggsave(file = "output/MetaSearch_search_efficiency_2.pdf",
+       plot = pl_search_sensitivity_joint,
+       device = "pdf",
+       width = 8.2,
+       height = 4,
+       units = "in",
+       dpi = 300)
+```
+
+
+# Fig's 7 and 9: Data Plus Theory Section
+
+## Load and prep data from Schulz et al. (2020)
+
+Here, we can either do the entire preprocessing here or load an existing fit. 
+
+
+```{r}
+data_processing_setting <- "load"
+
+if(data_processing_setting == "run"){
+  
+  df_s1 <- read.csv(file = "data/raw/S1_TaskData.csv", header = TRUE) # Task Data
+  df_s2 <- read.csv(file = "data/raw/S2_TaskData.csv", header = TRUE) # Task Data
+  df_complete <- rbind(df_s1,df_s2)
+  
+  df_add_s1 <- read.csv(file = "data/raw/S1_Add.csv", header = TRUE)
+  df_add_s2 <- read.csv(file = "data/raw/S2_Add.csv", header = TRUE)
+  df_add_complete <- rbind(df_add_s1, df_add_s2)
+  
+  ids <- unique(df_complete$ID)
+  length(ids)
+  
+  
+  df_complete[which(df_complete$Confidence1st == 67),]$Confidence1st <- 1
+  df_complete[which(df_complete$Confidence1st == 83),]$Confidence1st <- 2
+  df_complete[which(df_complete$Confidence1st == 100),]$Confidence1st <- 3
+  df_complete[which(df_complete$Confidence2nd == 67),]$Confidence2nd <- 1
+  df_complete[which(df_complete$Confidence2nd == 83),]$Confidence2nd <- 2
+  df_complete[which(df_complete$Confidence2nd == 100),]$Confidence2nd <- 3
+  
+  
+  df_compleSte <- df_complete %>% 
+    mutate(Confidence1st = as.factor(Confidence1st),
+           Confidence2nd = as.factor(Confidence2nd))
+  
+  df_meta <- get_averages_and_meta_stats(df_complete, df_add_complete, 
+                                        fit_type = "hmetad", hmetad_seed = 20)
+  
+  # write.csv(x = df_meta, "data/processed/df_meta_hmetad_seed20.csv")
+  
+  
+} else if(data_processing_setting == "load") {
+  
+  df_meta <- read.csv("data/processed/df_meta_hmetad_seed20.csv")
+}
+
+
+```
+
+
+```{r}
+ids_with_intermediate_search <- df_meta %>% 
+  filter(mean_search >= 0.05 & mean_search <= 0.95)
+ids_with_intermediate_search <- as.vector(unique(ids_with_intermediate_search$ID))
+
+df_intermediate_search <- df_complete %>% 
+  filter(ID %in% ids_with_intermediate_search)
+
+length(ids_with_intermediate_search)
+
+```
+
+## Trial-by-trial effects (Fig. 9)
+
+### Model
+
+#### Search by cost and confidence curves
+
+First, we get the components from a model
+
+```{r}
+df_components <- model.2o(1.25,1.25,0.5,1,0, output = "components")
+
+df_components <- rbind(df_components, df_components)
+df_components$rS <- rep(c(-.05, -.2), each = nrow(df_components)/2)
+df_components$Q_difference <- df_components$Q1 + df_components$rS - df_components$Q0
+```
+
+
+We then compute a choice probability based on this
+
+```{r, fig.height=3.5, fig.width=4}
+softmax_temp <- 20
+
+df_components$choice_p <- sigmoid(20*df_components$Q_difference)
+
+pl_choice_probabilities_with_label <- df_components %>%
+  filter(cI > 0.5) %>% 
+  mutate(rS = as.factor(rS * 100),
+         rS = fct_rev(rS)) %>% 
+  ggplot(aes(cI, choice_p, colour = as.factor(rS), fill = as.factor(rS))) +
+    geom_area(position = "identity", alpha = .1) +
+    geom_line(size = lsize) +
+  guides(fill = "none") +
+    scale_color_manual(values = palette_4costs[c(2,4)], name = bquote(r[S])) +
+    scale_fill_manual(values = palette_4costs[c(2,4)], name = bquote(r[S])) +
+    scale_x_continuous(name = bquote(c[I])) +
+    scale_y_continuous(name = "Probability of Search",
+                       breaks = c(0, .5, 1))
+
+
+pl_choice_probabilities <- pl_choice_probabilities_with_label + guides(color = "none", fill = "none")
+pl_choice_probabilities
+```
+
+```{r}
+pl_choice_probabilities_with_label
+```
+
+```{r}
+ggsave(file = "output/final/MetaSearch_confcost_simulation.pdf",
+       plot = pl_choice_probabilities_with_label,
+       device = "pdf",
+       width = 4,
+       height = 4,
+       units = "in",
+       dpi = 300)
+```
+
+
+#### Sensitivity plot
+
+##### Simulations
+
+```{r}
+run_sensitivity_plot_sim <- FALSE
+
+if (run_sensitivity_plot_sim) {
+  example_seed <- 297
+  set.seed(example_seed)
+  n_overunder_sim <- 150
+  
+  performance_objective <-  runif(n_overunder_sim, .6, .85) 
+  performance_subjective <- runif(n_overunder_sim, .6, .85) 
+  performance_tau <- runif(n_overunder_sim, .6, .85) 
+  
+  sigma_is_subjective <- 1/qnorm(performance_subjective) 
+  sigma_is_objective <- 1/qnorm(performance_objective) 
+  tau_is <- 1/qnorm(performance_tau)
+  
+  df_overunderconf <- get_simulated_df_with_search_and_meta_metrics(
+    sI_vector = sigma_is_objective, 
+    tI_vector = tau_is,
+    sI_subj_vector = sigma_is_subjective, 
+    rho_fix = 0.3,
+    sF_fix = 1,
+    rS_fix = -.1,
+    model = "2o",
+    n_total_simulations = 500,
+    compute_meta_d = TRUE,
+    pad_factor = 0,
+    meta_d_fit_type = "hmetad",
+    hmetad_seed = 1
+  )
+}
+
+```
+
+
+```{r}
+# filename_sim_df <- paste0("data/simulations/df_overunderconf_n_", n_overunder_sim, "_seed_", example_seed, "_1.csv")
+# write.csv(df_overunderconf, filename_sim_df)
+```
+
+```{r}
+df_overunderconf <- read.csv("data/simulations/df_overunderconf_n_150_seed_297_1.csv")
+```
+
+
+##### Plot
+
+We  write a function that does the sensitivity plots
+
+```{r}
+plot_sensitivity_plots <- function(df, scatter = "meta-d", 
+                                   ratio_axis_limits = c(-2,4),
+                                   meta_d_axis_limits = c(0,4),
+                                   bin_width = 40){
+  
+  pl_conditional_boxplot <- df %>% 
+    pivot_longer(cols = c("av_search_correct_empirical", "av_search_incorrect_empirical"), 
+                 names_to = "Correctness",
+                 values_to = "conditional_search") %>% 
+    mutate(Correctness = fct_rev(Correctness)) %>% 
+    ggplot(aes(Correctness, conditional_search, fill = Correctness)) +
+      geom_boxplot(size = 1)  +
+      scale_fill_manual(values = c(colour$distribution_incorrect,colour$distribution_correct)) +
+      guides(fill = "none") +
+      scale_x_discrete(name = "Initial Accuracy", labels = c("Incorrect", "Correct")) +
+      scale_y_continuous(name = "Av. Search", limits = c(0,1)) 
+  # pl_conditional_boxplot
+  
+  
+  
+  pl_search_ratio_distribution <- df %>% 
+    ggplot(aes(search_ratio_empirical)) + 
+      geom_histogram(binwidth = bin_width,
+                     fill = "lightgrey",
+                      colour = "black") +
+      scale_y_continuous(name = "Count", breaks = c(0,10),
+                         expand = c(0,0)) +
+      scale_x_continuous(name = "Search Sensitivity",
+                         limits = ratio_axis_limits) +
+      geom_vline(xintercept = 0,
+                 alpha = .5,
+                 linetype = "dashed")  +
+      coord_flip() 
+
+  pl_search_ratio_by_meta_d_grey <- df %>% 
+    ggplot(aes(meta_da, search_ratio_empirical, colour = tI)) +
+      geom_point() +
+      geom_smooth(method = "lm", se = FALSE,
+                  colour = "black")  +
+      geom_hline(yintercept = 0,
+                 alpha= .5,
+                 linetype = "dashed") +
+      scale_x_continuous(name = "meta-d'") +
+      scale_y_continuous(name = "Search Sensitivity") +
+      coord_cartesian(ylim = ratio_axis_limits,
+                      xlim = meta_d_axis_limits) +
+      scale_fill_continuous_sequential(palette = "Blues",
+                                       end = 1, begin = .15,
+                                       name = bquote(tau[I])) +
+      scale_colour_continuous_sequential(limits = c(0.8,4.2),palette = "Blues",
+                                       end = 1, begin = .23,
+                                       name = bquote(tau[I]))
+
+  pl_search_ratio_by_M_ratio_grey <- df %>% 
+    ggplot(aes(M_ratio, search_ratio_empirical, fill = sI_by_tI)) +
+      geom_point(colour = "black",
+                 shape = 21) +
+      geom_smooth(method = "lm", se = FALSE,
+                  colour = "black")  +
+      geom_hline(yintercept = 0,
+                 alpha= .5,
+                 linetype = "dashed") +
+    coord_cartesian(ylim = ratio_axis_limits,
+                    xlim = meta_d_axis_limits) +
+    scale_fill_continuous_divergingx(palette = "Geyser",
+                                 name = bquote(sigma[I]*"/"*tau[I]),
+                                 # limits = c(0.50, 1.5),
+                                 mid = 1)
+
+  if (scatter == "meta-d") pl_scatter <- pl_search_ratio_by_meta_d_grey
+  if (scatter == "M-ratio") pl_scatter <- pl_search_ratio_by_M_ratio_grey
+
+  plot_array <- (pl_conditional_boxplot | 
+                   pl_search_ratio_distribution | 
+                   pl_scatter) +
+    plot_layout(widths = c(1,.7,1.7))
+  
+  return(plot_array)
+}
+```
+
+We combine this plot with the plot choice probability plot
+
+
+```{r, fig.width= 12, fig.height= 4}
+pl_model_sensitvity_large <- 
+  (pl_choice_probabilities + 
+   plot_sensitivity_plots(df_overunderconf, 
+                          meta_d_axis_limits = c(-.5,3.2),
+                          ratio_axis_limits = c(-1.4,3.3),
+                          scatter = "meta-d", bin_width = .1)) + 
+    plot_layout(widths = c(1.7,4))
+pl_model_sensitvity_large
+```
+
+## Data
+
+### Effects of confidence and cost on search
+
+We make the plot
+
+```{r, fig.height=3.5, fig.width=5}
+pl_confidence_cost <- df_intermediate_search %>% 
+  group_by(ID, Confidence1st, InfoCost) %>% 
+  summarise(avg_info_seek = mean(SeeAgain)) %>% 
+  ggplot(aes(x = as.factor(Confidence1st), y = avg_info_seek, 
+             colour = as.factor(InfoCost),
+             fill = as.factor(InfoCost))) +
+    geom_boxplot(size = 1,
+                 outlier.shape = NA) +
+    scale_colour_manual(values = rep("black",2)) +  #palette_4costs[c(1,3)], name = "Cost"s) +
+    scale_fill_manual(values = palette_4costs[c(1,3)], name = bquote(r[S])) +
+    scale_y_continuous(breaks = c(0, .5, 1)) + 
+    guides(colour = "none") + 
+    labs(x = "Initial Confidence Level",
+         y = "Av. Search") 
+pl_confidence_cost
+```
+
+```{r}
+ggsave(file = "output/final/MetaSearch_confidence cost.pdf",
+       plot = pl_confidence_cost,
+       device = "pdf",
+       width = 7.75,
+       height = 4,
+       units = "in",
+       dpi = 300)
+```
+
+
+We analyse this
+
+```{r}
+df_intermedia_search_for_analysis <- df_intermediate_search %>% 
+  mutate(Confidence1st = as.numeric(Confidence1st) -2,
+         InfoCost = ifelse(InfoCost == 5, 0, 1))
+```
+
+```{r}
+m_seek_by_conf_cost_rslope <- mixed(SeeAgain ~ Confidence1st + InfoCost +
+                        (Confidence1st + InfoCost|ID), 
+                        data = df_intermedia_search_for_analysis, 
+                        family = binomial,
+                        method = "LRT",
+                        nAGQ = 0)
+anova(m_seek_by_conf_cost_rslope)
+summary(m_seek_by_conf_cost_rslope)
+```
+
+### Effects of accuracy on search
+
+We make the plot
+
+```{r, fig.height=3.5, fig.width=3}
+pl_within_accuracy <- df_intermediate_search %>%
+  mutate(Correct1st = as.factor(Correct1st)) %>% 
+  group_by(ID, Correct1st) %>% 
+  summarise(avg_info_seek = mean(SeeAgain)) %>% 
+  ggplot(aes(x = Correct1st, y = avg_info_seek, fill = Correct1st)) +
+    geom_boxplot(size = 1) +
+    scale_fill_manual(values = c(colour$distribution_incorrect,colour$distribution_correct)) +
+    guides(fill = "none") +
+    scale_x_discrete(name = "Initial Accuracy", labels = c("Incorrect", "Correct")) +
+    scale_y_continuous(name = "Av. Search")
+pl_within_accuracy
+```
+
+
+We run the analysis
+
+```{r}
+m_seek_by_correct <- mixed(SeeAgain ~ Correct1st +
+                        (Correct1st|ID), 
+                        data = df_intermedia_search_for_analysis, 
+                        family = binomial,
+                        method = "LRT",
+                        nAGQ = 0)
+anova(m_seek_by_correct)
+summary(m_seek_by_correct)
+```
+
+
+### Search Sensitivity
+
+#### Compute search sensitivity from data
+
+```{r}
+df_search_ratios <- df_intermediate_search %>% 
+  mutate(Correct1st = as.factor(Correct1st),
+         Correct1st = ifelse(Correct1st == 1, "correct", "incorrect")) %>% 
+  group_by(ID, Correct1st) %>%
+  summarize(mean_search = mean(SeeAgain)) %>% 
+  pivot_wider(id_cols = "ID",
+              names_from = "Correct1st",
+              names_prefix = "search_",
+              values_from = "mean_search")
+
+df_search_ratios <- merge(df_meta,
+                                  df_search_ratios)
+
+df_search_ratios <- df_search_ratios %>% 
+  mutate(search_ratio =  (search_incorrect - search_correct) / mean_search)
+
+df_search_ratios
+```
+
+We probe the number of participants with search sensitivty larger than 0
+
+```{r}
+df_search_ratios %>% 
+  mutate(search_ratio_greater_0 = ifelse(search_ratio > 0, TRUE, FALSE)) %>% 
+  count(search_ratio_greater_0) %>% 
+  mutate(percent = n / sum(n))
+```
+
+#### Plots of search sensitivity
+
+We first plot the distribution
+
+```{r}
+pl_search_ratio_distribution <- df_search_ratios %>% 
+  ggplot(aes(search_ratio)) + 
+    geom_histogram(binwidth = .1,
+                     fill = "lightgrey",
+                      colour = "black") +
+    scale_y_continuous(name = "Count", expand = c(0,0)) +
+    scale_x_continuous(name = "Search Sensitivity") +
+    geom_vline(xintercept = 0,
+               alpha = .5,
+               linetype = "dashed")  +
+    coord_flip() 
+    
+pl_search_ratio_distribution
+```
+
+And then the scatter plots
+
+```{r}
+pl_seekratio_metad <- df_search_ratios %>% 
+  #filter(meta_dprime > -.5) %>% 
+  ggplot(aes(meta_dprime, search_ratio)) +
+    geom_point(fill = "lightgrey",
+               colour = "black",
+               shape = 21) +
+    geom_smooth(method = "lm", se = FALSE,
+                colour = "black")  +
+    scale_y_continuous(name = "Search Sensitivity") +
+    scale_x_continuous(name = "meta-d'") +
+    geom_hline(yintercept = 0,
+               alpha= .5,
+               linetype = "dashed") +
+    stat_cor(method = "pearson")
+pl_seekratio_metad
+```
+
+And then make the full plot
+
+```{r, fig.width= 12, fig.height= 4}
+pl_data_sensitivity_large <- 
+  (pl_confidence_cost + guides(fill = "none") | pl_within_accuracy |  pl_search_ratio_distribution | pl_seekratio_metad) +
+    plot_layout(widths = c(1.7, 1,.7,1.7))
+
+pl_data_sensitivity_large
+```
+
+We also run the correlation anaylsis
+
+```{r}
+cor.test(df_search_ratios$meta_dprime, df_search_ratios$search_ratio)
+```
+
+
+## Full trial-by-trial results
+
+```{r, fig.width= 13, fig.height= 8}
+pl_within_results_joint <- pl_model_sensitvity_large / pl_data_sensitivity_large
+pl_within_results_joint
+```
+
+
+```{r}
+ggsave(file = "output/final/MetaSearch_within_results.pdf",
+       plot = pl_within_results_joint,
+       device = "pdf",
+       width = 13,
+       height = 8,
+       units = "in",
+       dpi = 300)
+```
+
+
+# Fig. 10: Task averages with over and underconfidence
+
+## Simulations
+
+### Scatterplots
+
+```{r, fig.height= 8, fig.width= 17}
+simulation_point_shape <- 21
+simulation_point_size <- 2.5
+
+pl_accuracy_confidence <- df_overunderconf %>% 
+  ggplot(aes(av_correct, av_confidence, fill = sigma_difference)) +
+    geom_point(colour = "black",
+               size = simulation_point_size,
+               shape = simulation_point_shape) +
+    # geom_smooth(method = "lm", colour = "black") +
+    scale_y_continuous(name = "Av. Confidence",
+                       limits = c(.57, .87))+
+    scale_x_continuous(name = axis_name_initial_acc,
+                       limits = c(.57, .87)) +
+    scale_fill_continuous_divergingx(name = 
+                                    bquote(sigma["I"]*" - "*sigma["I"]), # adding to second R,
+                                     palette = "PuOr",
+                                     breaks = c(-2,0,2)) +
+    geom_abline(alpha = .3, linetype = "dashed") +
+    coord_fixed() 
+
+
+pl_accuracy_search <- df_overunderconf %>% 
+  ggplot(aes(av_correct, av_search)) +
+    geom_point(aes(fill = sigma_difference),
+               colour = "black",
+               size = simulation_point_size,
+               shape = simulation_point_shape) +
+    geom_smooth(method = "lm",
+                colour = "black") +
+    scale_y_continuous(name = "Av. Search",
+                       limits = c(-.03, 1.03),
+                       breaks = c(0,.5,1))+
+    scale_x_continuous(name = axis_name_initial_acc,
+                       limits = c(.57, .87)) +
+    scale_fill_continuous_divergingx(name = 
+                                     bquote(sigma["I, obj"]*" - "*sigma["I, subj."]),
+                                   palette = "PuOr",
+                                   breaks = c(-2,0,2)) + 
+    guides(fill = "none")
+
+
+pl_confidence_search <- df_overunderconf %>% 
+  ggplot(aes(av_confidence, av_search)) +
+    geom_point(aes(fill = sigma_difference),
+                   colour = "black",
+                   size = simulation_point_size,
+                   shape = simulation_point_shape) +
+    geom_smooth(method = "lm",
+                colour = "black") +
+    scale_y_continuous(name = "Av. Search",
+                       limits = c(-.03, 1.03),
+                       breaks = c(0,.5,1)) +
+    scale_x_continuous(name = "Av. Confidence",
+                       breaks = c(0.6, 0.7, 0.8),
+                       limits = c(.6, .87)) +
+    scale_fill_continuous_divergingx(name = 
+                                   bquote(sigma["I, obj"]*" - "*sigma["I, subj."]),
+                                 palette = "PuOr",
+                                 breaks = c(-2,0,2)) + 
+    guides(fill = "none")
+
+pl_metaefficiency_search <- df_overunderconf %>% 
+  ggplot(aes(M_ratio, av_search)) +
+    geom_point(aes(fill = sigma_difference),
+                   colour = "black",
+                   size = simulation_point_size,
+                   shape = simulation_point_shape) +
+    scale_fill_continuous_divergingx(name = 
+                                 bquote(sigma["I, obj"]*" - "*sigma["I, subj."]),
+                               palette = "PuOr",
+                               breaks = c(-2,0,2)) + 
+    geom_point(colour = "black",
+             fill =  "lightgrey",
+             shape = 21) +
+    geom_smooth(method = "lm",
+                colour = "black") +
+    scale_y_continuous(name = "Av. Search",
+                       limits = c(-.03, 1.03),
+                       breaks = c(0,.5,1))+
+    scale_x_continuous(name = "M-ratio")  + # bquote(sigma["I,objective"]*"/"*tau[I])
+
+        geom_point(colour = "black",
+                 fill =  "lightgrey",
+                 shape = 21) +
+    geom_vline(xintercept = 1, alpha = .3, linetype = "dashed") +
+    # lims(x = c(0,2.5))
+    guides(fill = "none")
+
+pl_meta_d_search <- df_overunderconf %>% 
+  ggplot(aes(meta_da, av_search)) +
+    geom_point(aes(fill = sigma_difference),
+                   colour = "black",
+                   size = simulation_point_size,
+                   shape = simulation_point_shape) +
+    scale_fill_continuous_divergingx(name = 
+                                 bquote(sigma["I"]*" - "*sigma["I"]), # adding to second R
+                               palette = "PuOr",
+                               breaks = c(-2,0,2)) + 
+    geom_smooth(method = "lm",
+                colour = "black") +
+    scale_y_continuous(name = "Av. Search",
+                       limits = c(-.03, 1.03),
+                       breaks = c(0,.5,1))+
+    scale_x_continuous(name = "meta-d'") +
+    guides(fill = "none")
+
+pl_meta_d_search
+```
+
+We plot this together
+
+```{r, fig.height= 4, fig.width= 17}
+pls_averages <- (pl_accuracy_confidence | pl_accuracy_search | pl_confidence_search | pl_meta_d_search) &
+    theme_classic(base_size = 20) # + plot_annotation(tag_levels = 'A') 
+pls_averages
+```
+
+```{r}
+ggsave(file = "output/final/MetaSearch_average_results.pdf",
+       plot = pls_averages,
+       device = "pdf",
+       width = 17,
+       height = 4,
+       units = "in",
+       dpi = 300)
+```
+
+### Regression
+
+#### Run regression
+
+```{r}
+df_overunderconf_scaled <- df_overunderconf %>% 
+  mutate(av_search = scale(av_search),
+         av_correct = scale(av_correct),
+         av_confidence = scale(av_confidence),
+         meta_da = scale(meta_da),
+         M_ratio = scale(M_ratio)
+  )
+
+m_search_by_all_metad <- lm(av_search ~ av_correct + av_confidence + meta_da, 
+                      df_overunderconf_scaled)
+m_search_by_all_metad <- summary(m_search_by_all_metad)
+m_search_by_all_metad
+
+# Get data ready for the regression
+df_av_search_regression_metad <- data.frame(m_search_by_all_metad$coefficients)
+df_av_search_regression_metad
+df_av_search_regression_metad$parameter <- c("Intercept","Av. Accuracy", "Av. Confidence", "meta-d'")
+```
+
+#### Plot regression
+
+```{r, fig.height= 4, fig.width= 12}
+plot_regression <- function(df, 
+                            y_limits = c(-.35,.35),
+                            order_vector = c(2,1,3)
+                            ){
+  
+  regressor_order <- c("Av. Confidence","Av. Accuracy", "meta-d'")
+  regressor_order <- regressor_order[order_vector]
+  regressor_labels <-  c("Average\nConfidence", "Average\nAccuracy", "meta-d'")
+  regressor_labels <- regressor_labels[order_vector]
+  regressor_palette <- c(palette_for_sigma[3],
+                         divergingx_hcl(5, "PuOr")[4],
+                         palette_5taus[2])
+  
+  # regressor_palette <- c( #palette_for_sigma[3], 
+  #                        rep("grey",3))
+  regressor_palette <- regressor_palette[order_vector]
+  
+  regressor_palette <- 
+  
+  
+  pl_regression <- df %>% 
+    filter(parameter != "Intercept") %>% 
+    mutate(parameter = fct_relevel(parameter, regressor_order)) %>% 
+    ggplot(aes(parameter, Estimate, fill = parameter)) +
+      geom_col(width = .7, colour = "black") +
+      geom_errorbar(aes(ymin = Estimate - Std..Error,
+                        ymax = Estimate + Std..Error),
+                    width = .2) +
+      geom_hline(yintercept = 0) +
+      guides(fill = "none") +
+      scale_y_continuous(
+        name = bquote('Standardized ' * beta),
+        limits = y_limits
+      ) +
+      scale_x_discrete(name = "Predictors of Av. Search",
+                       labels = regressor_labels) +
+      scale_fill_manual(values = regressor_palette) +
+      theme_classic(base_size = 20)
+      
+  return(pl_regression)
+}
+```
+
+```{r}
+pl_model_regression <- plot_regression(df = df_av_search_regression_metad,
+                y_limits = c(min(df_av_search_regression_metad$Estimate - .15),.4))
+```
+
+## Data
+
+### Correlations
+
+```{r}
+cor.test(df_meta$mean_accuracy, df_meta$mean_confidence)
+```
+
+```{r}
+cor.test(df_meta$mean_search, df_meta$mean_confidence)
+cor.test(df_meta$mean_search, df_meta$mean_accuracy)
+cor.test(df_meta$mean_search, df_meta$meta_dprime)
+```
+
+### Run regression
+
+We run the regression
+
+```{r}
+df_meta_scaled <- df_meta %>% 
+  # filter(ID %in% ids_with_intermediate_search) %>% 
+  mutate(mean_search = scale(mean_search),
+         mean_accuracy = scale(mean_accuracy),
+         mean_confidence = scale(mean_confidence),
+         meta_dprime = scale(meta_dprime),
+         mratio = scale(mratio),
+         MaxPoints = scale(MaxPoints),
+         AccStronger = scale(AccStronger),
+         mean_final_accuracy = scale(mean_final_accuracy)
+         )
+
+
+m_search_by_all <- lm(mean_search ~ mean_accuracy + mean_confidence  +  meta_dprime, df_meta_scaled)
+m_search_by_all <- summary(m_search_by_all)
+m_search_by_all
+```
+
+
+### Plot the regression
+
+We get the regression ready for plotting
+
+```{r}
+df_av_search_regression <- data.frame(m_search_by_all$coefficients)
+df_av_search_regression
+df_av_search_regression$parameter <- c("Intercept","Av. Accuracy", "Av. Confidence", "meta-d'")
+
+pl_data_regression <- plot_regression(df_av_search_regression,
+                                      y_limits = c(min(df_av_search_regression_metad$Estimate - .15),.4))
+```
+
+## Joint regression plot: data & simulations
+
+```{r, fig.height= 4, fig.width= 12}
+pls_regression <- pl_model_regression + pl_data_regression  & 
+  theme_classic(base_size = 20)
+pls_regression
+```
+
+```{r}
+ggsave(file = "output/final/MetaSearch_regressions.pdf",
+       plot = pls_regression,
+       device = "pdf",
+       width = 12,
+       height = 4,
+       units = "in",
+       dpi = 300)
+```
+
+# Appendix: More results
+
+## Data
+
+### Distribution of meta-d and da
+
+```{r}
+pl_meta_distribution <- df_meta %>% 
+  ggplot(aes(dprime, meta_dprime, colour = mratio)) +
+    geom_point() +
+    geom_abline(linetype = "dashed") +
+    # geom_smooth(method = "lm", colour = "black") +
+    coord_fixed() +
+    scale_colour_viridis(name = "M-ratio", limits = c(min(df_meta$mratio),max(df_meta$mratio)),option = "D", begin = 0) +
+    scale_x_continuous(name = "d'", limits = c(-.5,3)) + 
+    scale_y_continuous(name = "meta-d'")
+
+pl_meta_distribution
+```
+
+
+```{r}
+ggsave(file = "output/MetaSearch_meta_da_and_da_distributions.pdf",
+       plot = pl_meta_distribution,
+       device = cairo_pdf,
+       width = 6,
+       height = 4,
+       units = "in",
+       dpi = 300)
+```
+
+
+### Final accuracy
+
+
+```{r, fig.width=6, fig.height=4}
+pl_data_final_acc <- df_meta %>% 
+  ggplot(aes(mean_final_accuracy, mean_accuracy, colour = mean_search)) +
+    geom_abline(linetype = "dashed") +
+    # geom_point() +
+    geom_jitter(width = .003, height = .003) + 
+    scale_colour_continuous_sequential(palette = "inferno",rev = FALSE,
+                                       end = .9,
+                                       begin = 0.25,
+                                       name = "Av. Search",
+                                       breaks = c(0,.5,1)) +
+    scale_y_continuous(limits = c(0.6,.85),
+                       breaks = c(0.6,.7,.8),
+                       name = "Av. Initial Accuracy") +
+    scale_x_continuous(name = "Av. Final Accuracy",
+                       breaks = c(0.5, 0.75, 1))
+ 
+```
+
+
+```{r}
+ggsave(file = "output/MetaSearch_data_final_acc.pdf",
+       plot = pl_data_final_acc,
+       device = cairo_pdf,
+       width = 6,
+       height = 4,
+       units = "in",
+       dpi = 300)
+```

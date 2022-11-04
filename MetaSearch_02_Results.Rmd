@@ -1,0 +1,1401 @@
+---
+title: "Results"
+author: "Lion Schulz"
+output: html_notebook
+---
+
+# Notebook purpose
+
+This notebook contains the code for the results part
+
+# Set-up
+
+We load all necessary libraries, packages and functions
+
+```{r}
+source("backend/global_all.R")
+```
+
+
+# Resolution set-up
+
+We define the resolution parameters for some figures. Note that "highest possible" aims to produce the best and most precise figures possible so the simulations will be computationally more expensive. Also note that increasing these values might present RAM issues, as the arrays generated in the modelling process can run over 1 GB ("highest possible" is about what's doable on a 16 GB machine).
+
+```{r}
+resolution_setting <- "for speed" # see if statements for options
+
+if (resolution_setting == "highest possible") {
+  resolution.Pd <- 4000
+  resolution.2o <- 500 
+} else if (resolution_setting == "medium") {
+  resolution.Pd <- 2000
+  resolution.2o <- 250 
+} else if (resolution_setting == "for speed"){
+  resolution.Pd <- 500
+  resolution.2o <- 150 
+}
+```
+
+
+# Figure 3: Average accuracy, confidence and seeking
+
+## Set-up
+
+We set up an accuracy space
+
+```{r}
+resolution_accuracy <- 15   # number of accuracies in the plot
+accuracy_vector <- seq(.6,.95,
+                       length.out = resolution_accuracy) # get vector of accuracies (phi(sigma_I))
+
+sI_vector <- 1/qnorm(accuracy_vector) # translate the accuracies into sigma_I
+```
+
+We set some task parameters
+
+```{r}
+d <- 1
+rho <- .5
+sF <- 1
+rS <- -.1
+```
+
+We set different levels of $\tau_I$ both for the postdecisional and the second-order model
+
+```{r}
+tI_vector.Pd <-  c(1,1.5,2,3,Inf) # Inf equals a first-order model
+
+tI_vector.2o <- tI_vector.Pd
+tI_vector.2o[length(tI_vector.2o)] <- 4 # we change the highest tau_I for the second-order model
+```
+
+## Sigma to accuracy plot
+
+```{r}
+df_translate_sigma <- data.frame(av_accuracy = accuracy_vector,
+                                 av_confidence = accuracy_vector,
+                                 sI = sI_vector)
+# here, we just define the average confidence, instead of computing the average confidence
+# for that, compare e.g. 
+```
+
+```{r}
+pl_phi_sigma <- ggplot(df_translate_sigma,aes(av_accuracy,sI)) + 
+                  geom_line(size = lsize, 
+                            color = colour$av_confidence) +
+                  geom_point(size = psize, 
+                             color = colour$av_confidence) +
+                  scale_x_continuous(name = axis_name_initial_acc) +
+                  scale_y_continuous(name = bquote(sigma[I]),
+                                     labels = scales::number_format(accuracy = 0.1))
+pl_phi_sigma
+```
+
+## Average confidence plot
+
+```{r}
+pl_average_confidence <- ggplot(df_translate_sigma,aes(x = av_accuracy, y =av_confidence)) + 
+                  geom_line(size = lsize, color = colour$av_confidence) +
+                  geom_point(size = psize, color = colour$av_confidence) +
+                  labs(x = axis_name_initial_acc, y = "Av. Confidence", color = bquote(tau["I"])) 
+pl_average_confidence
+```
+
+## Postdecisional Model
+
+We get the average seeking as a function of accuracy, for different taus. Note that we're also getting other statistics in this process (e.g. the final accuracy)
+
+First, we set up the data frame
+
+```{r}
+df_stats.Pd <- data.frame(sI = rep(sI_vector,
+                                   length(tI_vector.Pd)),
+                          tI = rep(tI_vector.Pd, each = length(sI_vector)),
+                          zetaI = NA,
+                          av_accuracy = rep(accuracy_vector,length(tI_vector.Pd)),
+                          av_search = NA,
+                          av_accuracy_s0 = NA,
+                          av_accuracy_s1 = NA)
+
+df_stats.Pd$zetaI <-  joinsd(df_stats.Pd$sI,df_stats.Pd$tI) # combined sd
+```
+
+We get the data
+
+```{r}
+pb <- qpb(df_stats.Pd) # sets a progress bar
+
+for (i in 1:nrow(df_stats.Pd)) {
+  
+  # Looping over the dataframe created above which defines different combinations of sigma_I and
+  # tau_I giving rise to zeta_I --> For this I am then computing the different model statistics:
+  # here, the average search, and the average accuracies with-/without seeking
+  
+  zetaI_temp <- df_stats.Pd$zetaI[i] # the zeta_I equals the sigma_I in the first-order model
+  
+  model_temp <- model.Pd(zetaI = zetaI_temp,
+                        sF = sF,
+                        rS = rS,
+                        resolution = resolution.Pd)
+  
+  df_stats.Pd[i,]$av_search <- model_temp$av_search
+  df_stats.Pd[i,]$av_accuracy_s0 <- model_temp$av_accuracy_s0
+  df_stats.Pd[i,]$av_accuracy_s1 <- model_temp$av_accuracy_s1
+  
+  upb(pb,i)
+}
+```
+
+```{r}
+# write.csv(df_stats.Pd,"output/df_stats_Pd_4000resolution.csv")
+df_stats.Pd <- read.csv("output/df_stats_Pd_4000resolution.csv")
+```
+
+
+### Plot
+
+```{r,  fig.width=7.5, fig.height=4.5}
+labels_tauI <- as.character(tI_vector.Pd) # to get labels to work with postdecisional model and second order model
+df_stats.Pd$tI <- as.factor(df_stats.Pd$tI)
+df_stats.Pd$tI  <- factor(df_stats.Pd$tI , levels =  rev(as.factor(tI_vector.Pd)))
+
+pl_av_search.Pd <- ggplot(df_stats.Pd,aes(x = av_accuracy, y =av_search, colour = tI)) + 
+                  geom_line(size = lsize) + geom_point(size = psize) +
+                  scale_color_manual(labels = rev(labels_tauI), values = palette_5taus) + 
+                  labs(x =axis_name_initial_acc, color = bquote(tau["I"])) +
+                  scale_y_continuous(limits = c(0,1),
+                                     name = "Av. Search",
+                                     breaks = breaks_avseek_y) 
+
+pl_av_search.Pd
+```
+
+## Second-order model
+
+We set up the dataframe and get the data
+
+```{r}
+rhos <- c(.2,.5,.8) # define different rhos to plot
+
+setting_2o_search_between_points = F
+
+if (setting_2o_search_between_points == T) {
+  accuracy_vector.2o <- seq(.6,.95,
+                       length.out = (resolution_accuracy-1)*3+1) # get vector of accuracies (phi(sigma_I))
+} else {
+  accuracy_vector.2o <- accuracy_vector
+}
+
+sI_vector.2o <- 1/qnorm(accuracy_vector.2o)
+
+sitirho <- expand.grid(sI_vector.2o, tI_vector.2o, rhos) # combine each level with each other
+
+df_stats.2o <- data.frame(sI = sitirho[,1], 
+                          tI = sitirho[,2],
+                          rho = sitirho[,3],
+                          aF = F, # only compute aF on dots in plot
+                          av_accuracy = pnorm(0,-d,sitirho[,1]),
+                          av_search = NA,
+                          av_search_correct = NA,
+                          av_search_incorrect = NA,
+                          av_accuracy_s1 = NA,
+                          av_accuracy_s0 = NA) 
+
+df_stats.2o[which(round(df_stats.2o$sI,4) %in% round(sI_vector,4)),]$aF <- T 
+```
+
+
+```{r}
+# pb <- qpb(df_stats.2o)
+for (i in 1:nrow(df_stats.2o)) {
+  
+  # Looping over the dataframe defined above where we defined the parameter combinations
+  # of interest. "model.2o" then computes the model statistics of interest given these 
+  # parameters: Here, average seeking and with-/without-seeking accuracy 
+  
+  print(paste(i, "out of", nrow(df_stats.2o)))
+  
+  sI_temp <- df_stats.2o$sI[i]
+  tI_temp <- df_stats.2o$tI[i]
+  rho_temp <- df_stats.2o$rho[i]
+  compute_aF <- df_stats.2o$aF[i]
+  
+  model_temp <- model.2o(sI = sI_temp,
+                              tI = tI_temp,
+                              rho = rho_temp,
+                              sF = sF,
+                              rS = rS,
+                              output = "all",
+                              aF = compute_aF,
+                              resolution = resolution.2o)
+
+
+  df_stats.2o[i,]$av_search <- model_temp$av_search
+  df_stats.2o[i,]$av_search_correct <- model_temp$av_search_when_correct
+  df_stats.2o[i,]$av_search_incorrect <- model_temp$av_search_when_incorrect
+  
+  if (compute_aF) {
+      df_stats.2o[i,]$av_accuracy_s1 <- model_temp$av_accuracy_s1
+      df_stats.2o[i,]$av_accuracy_s0 <- model_temp$av_accuracy_s0
+  } else {
+      df_stats.2o[i,]$av_accuracy_s1 <- NA 
+      df_stats.2o[i,]$av_accuracy_s0 <- NA
+  }
+
+
+  # upb(pb,i)
+}
+```
+
+This can take quite a while, so we save this in case we need to reload it
+
+```{r}
+# write.csv(df_stats.2o,"output/df_stats_2o_500_with_interpolation.csv")
+# df_stats.2o <- read.csv("output/df_stats_2o_500_with_interpolation.csv")
+```
+
+
+```{r}
+# write.csv(df_stats.2o,"output/df_stats_2o_500resolution.csv")
+df_stats.2o <- read.csv("output/df_stats_2o_500resolution.csv")
+```
+
+
+Only for these specific parameter combinations: We add interpolated points on particular points of the to smooth out the line
+
+```{r}
+# We get the interpolation interval:
+interpolation_interval <- diff(accuracy_vector)[1]/4
+
+# We define the values where we would like to interpolate at
+interpolation_value_list = list(rho_02 = list(tau4 = seq(.825, .85, interpolation_interval),
+                                              tau3 = seq(.85, .875, interpolation_interval)),
+                                rho_05 = list(tau4 = seq(.75, .8, interpolation_interval),
+                                              tau3 = seq(.725, .825, interpolation_interval),
+                                              tau2 = seq(.85, .875, interpolation_interval)),
+                                rho_08 = list(tau4 = seq(.675, .775, interpolation_interval),
+                                              tau3 = seq(.75, .775, interpolation_interval),
+                                              tau2 = seq(.75,.825, interpolation_interval),
+                                              tau15 = seq(.825, .85, interpolation_interval),
+                                              tau1 = seq(.9, .925, interpolation_interval)))
+
+# We get the number of values we need to interpolate at
+rho_for_interpolation_lengths <- c(0,0,0)
+
+for (i in 1:length(interpolation_value_list)) {
+  rho_for_interpolation_lengths[i] <- sum(
+    lengths(interpolation_value_list[[i]])) 
+}
+
+length_interpolation_value_list <- sum(rho_for_interpolation_lengths)
+
+# We get the rhos and taus ready for the dataframe
+rhos_for_interpolation <- rep(rhos, rho_for_interpolation_lengths)
+taus_for_interpolation <- c(rep(c(4,3), lengths(interpolation_value_list$rho_02)),
+                            rep(c(4,3,2), lengths(interpolation_value_list$rho_05)),
+                            rep(c(4,3,2,1.5,1), lengths(interpolation_value_list$rho_08))
+                            )
+
+accuracy_vector_interpolation <- list()
+
+for (i in 1:length(interpolation_value_list)) {
+  
+  num_sub_taus <- length(interpolation_value_list[[i]])
+  
+  for (j in 1:num_sub_taus) {
+    
+    accuracy_vector_interpolation<- append(accuracy_vector_interpolation,
+                                           interpolation_value_list[[i]][[j]])
+    
+  } 
+}
+
+```
+
+
+```{r}
+# we get the old data frame structure
+df_stats.2o_with_interpol <- data.frame(matrix(NA,
+                                               nrow = length_interpolation_value_list,
+                                               ncol = ncol(df_stats.2o)))
+colnames(df_stats.2o_with_interpol) <- colnames(df_stats.2o)
+
+df_stats.2o_with_interpol$rho <- rhos_for_interpolation
+df_stats.2o_with_interpol$tI <- taus_for_interpolation
+df_stats.2o_with_interpol$av_accuracy <- as.numeric(accuracy_vector_interpolation)
+df_stats.2o_with_interpol$sI <- 1/qnorm(df_stats.2o_with_interpol$av_accuracy)
+
+
+# we delete the values that we already have computed the statistics for
+df_stats.2o_with_interpol <- df_stats.2o_with_interpol[which(
+  df_stats.2o_with_interpol$av_accuracy %!in% accuracy_vector.2o),]
+
+nrow(df_stats.2o_with_interpol)
+```
+
+```{r}
+for (i in 1:nrow(df_stats.2o_with_interpol)) {
+  
+  # Looping over the dataframe defined above where we defined the parameter combinations
+  # of interest. "model.2o" then computes the model statistics of interest given these 
+  # parameters: Here, average seeking and with-/without-seeking accuracy 
+  
+  print(paste(i, "out of", nrow(df_stats.2o_with_interpol)))
+  
+  sI_temp <- df_stats.2o_with_interpol$sI[i]
+  tI_temp <- df_stats.2o_with_interpol$tI[i]
+  rho_temp <- df_stats.2o_with_interpol$rho[i]
+  
+  model_temp <- model.2o(sI = sI_temp,
+                              tI = tI_temp,
+                              rho = rho_temp,
+                              sF = sF,
+                              rS = rS,
+                              output = "all",
+                              aF = F,
+                              resolution = resolution.2o)
+
+
+  df_stats.2o_with_interpol[i,]$av_search <- model_temp$av_search
+}
+```
+
+```{r}
+df_stats.2o$interpolation <- F
+df_stats.2o_with_interpol$interpolation <- T
+
+df_stats.2o <- rbind(df_stats.2o,
+                     df_stats.2o_with_interpol)
+
+```
+
+
+
+
+
+
+### Plotting
+
+We first subset the data for the specific rhos
+
+```{r}
+ind_2o_1 <- df_stats.2o$rho == rhos[1]
+ind_2o_2 <- df_stats.2o$rho == rhos[2]
+ind_2o_3 <- df_stats.2o$rho == rhos[3]
+
+df_stats.2o_1 <- df_stats.2o[ind_2o_1,]
+df_stats.2o_2 <- df_stats.2o[ind_2o_2,]
+df_stats.2o_3 <- df_stats.2o[ind_2o_3,]
+```
+
+
+
+```{r}
+# Figure that does the second-order plotting
+plot_av_search.2o <- function(df_2o_to_plot){
+  
+  df_dots <- df_2o_to_plot[df_2o_to_plot$interpolation == F,]
+  
+  plot <- ggplot(df_2o_to_plot,aes(x = av_accuracy, y =av_search, colour = as.factor(tI))) + 
+                  geom_line(size = lsize) + 
+                  geom_point(data = df_dots, 
+                             mapping = aes(x = av_accuracy, y =av_search, colour = as.factor(tI)), 
+                             size = psize) +
+                  scale_color_manual(values = rev(palette_5taus[1:5])) + 
+                  labs(x = axis_name_initial_acc, color = bquote(tau["I"])) +
+                  scale_y_continuous(limits = c(0,1),
+                                     name = "Av. Search",
+                                     breaks = breaks_avseek_y) +           
+                  guides(colour = "none") 
+
+  return(plot)
+}
+
+pl_av_search.2o_1 <- plot_av_search.2o(df_stats.2o_1)
+pl_av_search.2o_1
+```
+
+```{r}
+pl_av_search.2o_2 <- plot_av_search.2o(df_stats.2o_2)
+pl_av_search.2o_2
+```
+
+
+
+
+
+
+
+## Full plot
+
+```{r}
+pls_av_search <- pl_phi_sigma + pl_average_confidence +  plot_spacer() +
+  pl_av_search.Pd + pl_av_search.2o_1 + pl_av_search.2o_2 +
+  plot_layout(ncol = 3,
+              guides = 'collect')
+```
+
+
+```{r, fig.width=17.5, fig.height = 8.5}
+pls_av_search
+```
+
+We save this
+
+```{r}
+ggsave(file = "output/MetaSearch_av_search.pdf",
+        plot = pls_av_search,
+       device = cairo_pdf,
+       width = 17.5,
+       height = 8.5,
+       units = "in",
+       dpi = 300)
+```
+
+
+# Figure 4: Probing heatmaps
+
+This next part plots average search by the accuracy of the initial stimululs and the second stimulus
+
+## General set-up
+
+```{r}
+tI_levels_heatmaps <- tI_vector.2o[1:length(tI_vector.2o)]
+
+# This is necessary to define both sigma_F as well as sigma_I
+accuracy_vector_heatmaps <- seq(from = .6,
+                       to = .9,
+                       length.out = 7)
+
+
+sI_vector_heatmaps <- 1/qnorm(accuracy_vector_heatmaps)
+
+df_sIsFtI <- expand.grid(sI_vector_heatmaps,
+                     sI_vector_heatmaps,
+                     tI_levels_heatmaps)
+
+df_av_search_heatmap <- data.frame(sI = df_sIsFtI[,1], 
+                         sF = df_sIsFtI[,2], 
+                         tI = df_sIsFtI[,3], 
+                         av_search = NA)
+
+df_av_search_heatmap$phi_sI <- pnorm(0,-1,df_av_search_heatmap$sI)
+df_av_search_heatmap$phi_sF <- pnorm(0,-1,df_av_search_heatmap$sF)
+
+
+# Indexing for separte plots later on
+nsIsFs <- nrow(df_sIsFtI)/length(tI_levels_heatmaps) # height of sigma combiniations
+ind1 <- seq(1,nsIsFs)
+ind2 <- seq(nsIsFs+1, 2*nsIsFs)
+ind3 <- seq(2*nsIsFs+1, 3*nsIsFs)
+ind4 <- seq(3*nsIsFs+1, 4*nsIsFs)
+```
+
+
+## First-order
+
+```{r, fig.width=6, fig.height=6}
+df_av_search_heatmap.Fo <- df_av_search_heatmap[ind1,]
+
+for (i in 1:nrow(df_av_search_heatmap.Fo)) {
+  
+  sI_temp <- df_av_search_heatmap.Fo[i,]$sI
+  sF_temp <- df_av_search_heatmap.Fo[i,]$sF
+  
+  df_av_search_heatmap.Fo[i,]$av_search <- model.Pd(zetaI = sI_temp, 
+                                          sF = sF_temp,
+                                          rS = rS,
+                                          aF = F, # we don't need the final acc
+                                          resolution = resolution.Pd/2)$av_search
+}
+```
+
+```{r, fig.width=8, fig.height=6}
+pl_heat_search.Fo <- plot_av_seek_heatmap(df_av_search_heatmap.Fo, tI = F, legend = T) + 
+  ggtitle(bquote( "First-order (" * tau["I"] == ~ infinity * ")")) &
+  theme(plot.title = element_text(size = base_size*.8),
+        legend.title =  element_text(size = base_size*.8) )
+pl_heat_search.Fo 
+```
+
+
+## Post-decisional model
+
+
+```{r}
+df_av_search_heatmap.Pd <- df_av_search_heatmap
+
+pb <- qpb(df_av_search_heatmap.Pd)
+
+for (i in 1:nrow(df_av_search_heatmap.Pd)) {
+  
+  sI_temp <- df_av_search_heatmap.Pd$sI[i]
+  tI_temp <- df_av_search_heatmap.Pd$tI[i]
+  zetaI_temp <- joinsd(tI_temp, sI_temp)
+  sF_temp <- df_av_search_heatmap.Pd$sF[i]
+  
+  # print(df_av_search_heatmap.Pd[i,])
+  
+  df_av_search_heatmap.Pd[i,]$av_search <- model.Pd(zetaI = zetaI_temp, 
+                                          sF = sF_temp,
+                                          rS = rS,
+                                          aF = F, # we don't need the final acc
+                                          resolution = resolution.Pd/2)$av_search
+  
+
+  
+  upb(pb,i)
+}
+```
+
+
+```{r}
+pl_av_search_heatmap.Pd_1 <- plot_av_seek_heatmap(df_av_search_heatmap.Pd[ind1,], size = "small") & theme(axis.title = element_blank())
+pl_av_search_heatmap.Pd_2 <- plot_av_seek_heatmap(df_av_search_heatmap.Pd[ind2,], size = "small") & theme(axis.title = element_blank())
+pl_av_search_heatmap.Pd_3 <- plot_av_seek_heatmap(df_av_search_heatmap.Pd[ind3,], size = "small") & theme(axis.title = element_blank())
+pl_av_search_heatmap.Pd_4 <- plot_av_seek_heatmap(df_av_search_heatmap.Pd[ind4,], size = "small") & theme(axis.title = element_blank())
+
+# show an example
+pl_av_search_heatmap.Pd_2
+```
+
+
+## Second-order
+
+```{r}
+# set up heatmap
+df_av_search_heatmap.2o <- df_av_search_heatmap
+rho_av_search_heatmap <- .5
+
+pb <- qpb(df_av_search_heatmap.2o)
+
+for (i in 1:nrow(df_av_search_heatmap.2o)) {
+  
+  sI_temp <- df_av_search_heatmap.2o[i,]$sI
+  sF_temp <- df_av_search_heatmap.2o[i,]$sF
+  tI_temp <- df_av_search_heatmap.2o[i,]$tI
+  
+  # print(paste(sI_temp, sF_temp, tI_temp))
+  # 
+  # statstemp <- seekPercent_2o(sI = sI_temp,
+  #                              tI = tI_temp,
+  #                              rhI = rhI,
+  #                              sF = sF_temp,
+  #                              rS = rS,
+  #                             "all")
+  
+  model_temp <- model.2o(sI = sI_temp,
+                          tI = tI_temp,
+                          rho = rho_av_search_heatmap,
+                          sF = sF_temp,
+                          rS = rS,
+                          output = "av_search",
+                          aF = F,
+                          resolution = resolution.2o/2)
+  
+  df_av_search_heatmap.2o[i,]$av_search <- model_temp
+
+  upb(pb,i)
+}
+```
+
+Doing the actual plotting
+
+```{r}
+pl_av_search_heatmap.2o_1 <- plot_av_seek_heatmap(df_av_search_heatmap.2o[ind1,], size = "small") + 
+  theme(axis.title = element_blank())
+pl_av_search_heatmap.2o_2 <- plot_av_seek_heatmap(df_av_search_heatmap.2o[ind2,], size = "small") + 
+  theme(axis.title = element_blank())
+pl_av_search_heatmap.2o_3 <- plot_av_seek_heatmap(df_av_search_heatmap.2o[ind3,], size = "small") + 
+  theme(axis.title = element_blank())
+pl_av_search_heatmap.2o_4 <- plot_av_seek_heatmap(df_av_search_heatmap.2o[ind4,], size = "small") + 
+  theme(axis.title = element_blank())
+
+pl_av_search_heatmap.2o_1
+```
+
+
+
+### All together
+
+```{r, fig.width=18, fig.height=5}
+pls_av_search_heatmap.Pd <- pl_av_search_heatmap.Pd_4 | pl_av_search_heatmap.Pd_3 | pl_av_search_heatmap.Pd_2 | pl_av_search_heatmap.Pd_1
+pls_av_search_heatmap.Pd <- pls_av_search_heatmap.Pd  & theme(plot.title = element_text(size = base_size*.8, face = "bold")) 
+pls_av_search_heatmap.Pd
+
+
+pls_av_search_heatmap.2o <- pl_av_search_heatmap.2o_4 | pl_av_search_heatmap.2o_3 | pl_av_search_heatmap.2o_2 | pl_av_search_heatmap.2o_1
+pls_av_search_heatmap.2o <- pls_av_search_heatmap.2o & theme(plot.title = element_text(size = base_size*.8))
+pls_av_search_heatmap.2o
+```
+
+```{r, fig.width=18, fig.height=6.9}
+pls_av_search_heatmap.Pd2o <- pls_av_search_heatmap.Pd / pls_av_search_heatmap.2o
+
+pls_av_search_heatmaps <- pl_heat_search.Fo + pls_av_search_heatmap.Pd2o  +
+  plot_annotation(tag_levels = "A")  + 
+  plot_layout(guides = 'collect',
+              widths = c(1.05,2)) & 
+  theme(plot.tag.position = c(0, 1),
+        plot.tag = element_text(size = .8*base_size, hjust = 0, vjust = .1, face = "bold"))
+pls_av_search_heatmaps
+```
+
+
+
+
+```{r}
+ggsave(file = "output/MetaSearch_SeekingHeatmap.pdf",
+        plot = pls_av_search_heatmaps,
+       device = cairo_pdf,
+       width = 18,
+       height = 6.9,
+       units = "in",
+       dpi = 300)
+```
+
+
+# Figure 5: Confidence cut-offs
+
+## One-dimensional figure
+
+### Postdecisional
+
+Getting the data
+
+```{r}
+cost_levels <- c(-.1, -.2, -.3)
+
+cost_levels_sI <- expand.grid(sI_vector,cost_levels)
+
+df_cI_cutoffs.Pd <- data.frame(sI = cost_levels_sI[,1],
+                              rS = cost_levels_sI[,2],
+                              tI = 2,
+                              zetaI = NA,
+                              av_accuracy = rep(accuracy_vector,length(cost_levels)),
+                              av_search = NA,
+                              cI_cutoff = NA)
+
+df_cI_cutoffs.Pd$zetaI <-  joinsd(df_cI_cutoffs.Pd$sI,df_cI_cutoffs.Pd$tI)
+
+
+pb <- qpb(df_cI_cutoffs.Pd) # sets a progress bar
+
+for (i in 1:nrow(df_cI_cutoffs.Pd)) {
+  
+  zetaI_temp <- df_cI_cutoffs.Pd$zetaI[i]
+  rS_temp <- df_cI_cutoffs.Pd$rS[i]
+  
+  model_temp <- model.Pd(zetaI = zetaI_temp,
+                          sF = sF,
+                          rS = rS_temp,
+                          aF = F,
+                          resolution = resolution.Pd)
+  
+  df_cI_cutoffs.Pd[i,]$av_search <- model_temp$av_search
+  df_cI_cutoffs.Pd[i,]$cI_cutoff <- model_temp$cI_cutoff
+  
+  upb(pb,i)
+
+}
+```
+
+
+Saving (and loading a higher res variant)
+
+```{r}
+# write.csv(df_cI_cutoffs.Pd,"output/df_cI_cutoffs_Pd.csv")
+# df_cI_cutoffs.Pd <- read.csv("output/df_cI_cutoffs_Pd.csv")
+```
+
+
+```{r}
+cI_cutoff_yaxis_label <- "Confidence"
+
+cI_cutoff_yaxis_breaks <- c(0,.5,1)
+
+
+df_cI_cutoffs.Pd$rS <- as.factor(df_cI_cutoffs.Pd$rS)
+df_cI_cutoffs.Pd$rS  <- factor(df_cI_cutoffs.Pd$rS , levels =  as.factor(cost_levels))
+
+pl_cI_cutoff_pd <- ggplot(df_cI_cutoffs.Pd, aes(x = av_accuracy, y = cI_cutoff, colour = rS)) +
+  geom_line(size = lsize) +
+  geom_point(size = psize) +
+  geom_line(aes(y = 1 - cI_cutoff), size = lsize) +
+  geom_point(aes(y = 1- cI_cutoff), size = psize) +
+  scale_y_continuous(name = cI_cutoff_yaxis_label,
+                     breaks = cI_cutoff_yaxis_breaks,
+                     limits = c(0,1)) +
+  xlab(axis_name_initial_acc) +
+  scale_color_manual(values = palette_4costs[2:4],
+                     name = bquote(r[S])) +
+  ggtitle("Postdecisional") +  
+  theme(plot.title = element_text(size = base_size, face = "bold")) +
+  guides(colour = "none")
+pl_cI_cutoff_pd
+```
+
+### Second Order Figure
+
+To standardize this a little more, we keep tau and sigma equivalent for this
+
+```{r}
+rho_cI_cutoff <- .5
+
+df_cI_cutoffs.2o <- data.frame(sI = cost_levels_sI[,1], 
+                              tI = cost_levels_sI[,1],
+                              rS = cost_levels_sI[,2], # weird translation of facto
+                              av_accuracy = pnorm(0,-d,sI_vector),
+                              av_search = NA,
+                              cI_cutoff_up = NA,
+                              cI_cutoff_bo = NA)
+
+
+
+
+pb <- qpb(df_cI_cutoffs.2o)
+for (i in 1:nrow(df_cI_cutoffs.2o)) {
+  
+  sI_temp <- df_cI_cutoffs.2o$sI[i]
+  tI_temp <- df_cI_cutoffs.2o$tI[i]
+  rS_temp <- df_cI_cutoffs.2o$rS[i]
+  
+  # print(rS_temp)
+  
+  model_temp <- model.2o(sI = sI_temp,
+                              tI = tI_temp,
+                              rho = rho_cI_cutoff,
+                              sF = sF,
+                              rS = rS_temp,
+                              aF = F,
+                              output = "all",
+                              res = resolution.2o)
+  
+  
+  df_cI_cutoffs.2o[i,]$av_search <- model_temp$av_search
+  df_cI_cutoffs.2o[i,]$cI_cutoff_up <- model_temp$cI_cutoff[1]
+  df_cI_cutoffs.2o[i,]$cI_cutoff_bo <- model_temp$cI_cutoff[2]
+  
+  upb(pb,i)
+}
+```
+
+Saving (and loading) a higher res figur
+
+```{r}
+# write.csv(df_cI_cutoffs.2o,"output/df_cI_cutoffs_2o.csv")
+# df_cI_cutoffs.2o <- read.csv("output/df_cI_cutoffs_2o.csv")
+```
+
+
+```{r,fig.width=6.5,fig.height=5}
+df_cI_cutoffs.2o$rS <- as.factor(df_cI_cutoffs.2o$rS)
+df_cI_cutoffs.2o$rS  <- factor(df_cI_cutoffs.2o$rS , levels =  as.factor(cost_levels))
+
+pl_cI_cutoff_2o <-  ggplot(df_cI_cutoffs.2o, 
+                        aes(x = av_accuracy, y = 1 - cI_cutoff_bo,colour = as.factor(rS))) +
+  geom_line(size = lsize) +
+  geom_point(size = psize) +
+  geom_line(aes(y = cI_cutoff_bo,colour =  as.factor(rS)), size = lsize) +
+  geom_point(aes(y = cI_cutoff_bo,colour =  as.factor(rS)), size = psize) +
+  scale_y_continuous(name = cI_cutoff_yaxis_label,
+                     breaks = cI_cutoff_yaxis_breaks,
+                     limits = c(0,1)) +
+  xlab(axis_name_initial_acc) +
+  ggtitle("Second-Order") +  theme(plot.title = element_text(size = base_size, face = "bold"))+
+  theme(axis.title.y = element_blank()) +
+  scale_color_manual(values = palette_4costs[2:4],
+                    name = bquote(r[S])) 
+pl_cI_cutoff_2o
+```
+
+
+## As a function of sigma_F and R
+
+### First-order and postdecisional models
+
+```{r}
+num_cI_cutoffs <- 8
+cost_vector <- -seq(from = .05, to = .4, length.out = num_cI_cutoffs)
+phi_sF_vector_cI_cutoffs <- seq(from = .6,
+                                 to = .95,
+                                 length.out = 7)
+
+
+sF_vector_cI_cutoffs <- 1/qnorm(phi_sF_vector_cI_cutoffs)
+
+cost_and_sF <- expand.grid(sF_vector_cI_cutoffs, cost_vector)
+df_cI_cutoffs_2d.Pd <- data.frame(sF = cost_and_sF[,1], 
+                                  rS = cost_and_sF[,2],
+                                  av_search = NA,
+                                  cI_cutoff = NA)
+
+
+df_cI_cutoffs_2d.Pd$phi_sF <- pnorm(0,-1,df_cI_cutoffs_2d.Pd$sF)
+
+
+
+
+sI_for_pd_confdis <- 3
+
+pb <- qpb(df_cI_cutoffs_2d.Pd)
+
+for (i in 1:nrow(df_cI_cutoffs_2d.Pd)) {
+  
+  sF_temp <- df_cI_cutoffs_2d.Pd[i,]$sF
+  rS_temp <- df_cI_cutoffs_2d.Pd[i,]$rS
+  
+  model_temp <- model.Pd(zetaI = sI_for_pd_confdis,
+                    sF = sF_temp,
+                    rS = rS_temp,
+                    resolution = resolution.Pd)
+  
+  df_cI_cutoffs_2d.Pd[i,]$av_search <- model_temp$av_search
+  df_cI_cutoffs_2d.Pd[i,]$cI_cutoff <- model_temp$cI_cutoff
+  
+  upb(pb,i)
+  
+}
+
+
+df_cI_cutoffs_2d.Pd[df_cI_cutoffs_2d.Pd$av_search == 0,]$cI_cutoff <- 0.5
+# [df_cI_cutoffs_2d.Pd$av_search == 1,]$cI_cutoff <- 1
+```
+
+```{r}
+plot_cI_cutoff_heatmap <- function(df){
+  breaks_threshold_heatm <- c(-.35,-.2,-.05)
+  plot <- ggplot(df, aes(x = rS, y = phi_sF)) + 
+    geom_tile(aes(fill=cI_cutoff)) +
+    scale_x_continuous(name=bquote(r["S"]),
+                       expand = c(0,0),breaks_threshold_heatm) +
+    scale_y_continuous(name=bquote(X[F] * " Accuracy " * phi *"("*sigma["F"]*")"),
+                       expand = c(0,0)) +
+    scale_fill_viridis_c(breaks = c(.5, .75, 1),
+                         limits = c(.5,1)) +
+    labs(fill = "Cut-off") +
+    theme(plot.title = element_text(size = base_size*.8, face = "bold")) 
+  return(plot)
+}
+pl_cI_cutoff_2d.Pd <- plot_cI_cutoff_heatmap(df_cI_cutoffs_2d.Pd) + guides(fill = "none")
+pl_cI_cutoff_2d.Pd
+```
+
+
+### Second-order model
+
+```{r}
+df_cI_cutoffs_2d.2o <- df_cI_cutoffs_2d.Pd
+
+sI_heatmaps.2o <- 3
+tI_heatmaps.2o <- sI_heatmaps.2o
+
+
+pb <- qpb(df_cI_cutoffs_2d.2o)
+
+for (i in 1:nrow(df_cI_cutoffs_2d.2o)) {
+  
+  sF_temp <- df_cI_cutoffs_2d.2o[i,]$sF
+  rS_temp <- df_cI_cutoffs_2d.2o[i,]$rS
+
+  model_temp <- model.2o(sI = sI_heatmaps.2o,
+                          tI = tI_heatmaps.2o,
+                          rho = rho_cI_cutoff,
+                          sF = sF_temp,
+                          rS = rS_temp,
+                          output = "all",
+                          resolution = resolution.2o)
+  
+  
+  df_cI_cutoffs_2d.2o[i,]$av_search <- model_temp$av_search
+  df_cI_cutoffs_2d.2o[i,]$cI_cutoff <- model_temp$cI_cutoff[2]
+
+  upb(pb,i)
+}
+
+df_cI_cutoffs_2d.2o[df_cI_cutoffs_2d.2o$av_search == 0,]$cI_cutoff <- .5
+# df_cI_cutoffs_2d.2o[df_cI_cutoffs_2d.2o$av_search == 1,]$cI_cutoff <- 1
+```
+
+
+```{r}
+pl_cI_cutoff_2d.2o <- plot_cI_cutoff_heatmap(df_cI_cutoffs_2d.2o)
+pl_cI_cutoff_2d.2o <- pl_cI_cutoff_2d.2o & theme(axis.title.y = element_blank())
+pl_cI_cutoff_2d.2o
+```
+
+
+```{r, fig.width=12, fig.height = 10.5}
+pls_thresholds <- (pl_cI_cutoff_pd | pl_cI_cutoff_2o) / (pl_cI_cutoff_2d.Pd| pl_cI_cutoff_2d.2o) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(size = base_size,face = "bold"),
+        legend.title = element_text(size = base_size*.8),
+        legend.text = element_text(size = .8*base_size))
+pls_thresholds
+```
+
+```{r}
+# ggsave(file = "output/MP_Threshold.pdf",
+#        plot = pls_thresholds,
+#        device = cairo_pdf,
+#        width = 12,
+#        height = 10.5,
+#        units = "in",
+#        dpi = 300)
+```
+
+
+
+# Figure 6: Sensitivity, efficiency, confidence distributions
+
+## Search by efficiency plots
+
+```{r}
+sI_efficiency_plot <- c(1,1.5,2,5)
+```
+
+### Postdecisional model
+
+```{r}
+efficiency_ratios.Pd <- seq(1,1.8,by = .1)
+
+df_efficiency.Pd <- data.frame(sI = rep(sI_efficiency_plot,each = length(efficiency_ratios.Pd)),
+                                efficiency_ratio = rep(efficiency_ratios.Pd,length(sI_efficiency_plot)),
+                                zeta_I = NA, 
+                               av_search = NA)
+
+df_efficiency.Pd$zeta_I <- df_efficiency.Pd$sI / df_efficiency.Pd$efficiency_ratio
+
+pb <- qpb(df_efficiency.Pd)
+for (i in 1:nrow(df_efficiency.Pd)) {
+  df_efficiency.Pd[i,]$av_search <- model.Pd(zetaI = df_efficiency.Pd$zeta_I[i], 
+                                          sF = sF,
+                                          rS = rS,
+                                          aF = F, # we don't need the final accuracy
+                                          resolution = resolution.Pd)$av_search
+  upb(pb,i)
+}
+```
+
+```{r}
+# palette_4sigmas <- rev(brewer.pal(n = 5, name = "RdPu"))
+
+# palette_for_sigma <- sequential_hcl(10, "SunsetDark")
+
+
+df_efficiency.Pd$sI <- as.factor(df_efficiency.Pd$sI)
+df_efficiency.Pd$sI  <- factor(df_efficiency.Pd$sI , levels =  rev(as.factor(sI_efficiency_plot)))
+
+pl_efficiency.Pd <- plot_meta_efficiency(df_efficiency.Pd, "Pd") & guides(colour = "none")
+pl_efficiency.Pd 
+```
+
+```{r}
+# write.csv(df_efficiency.2o, "output/df_efficiency_Pd.csv")
+```
+
+
+### Second-Order Model
+
+Getting the data
+
+```{r}
+rho_efficiencies <- .5
+
+efficiency_ratio.2o <- seq(.6,1.8,by = .1)
+#efficiency_ratio.2o
+
+df_efficiency.2o <- data.frame(sI = rep(sI_efficiency_plot,each = length(efficiency_ratio.2o)),
+                      efficiency_ratio = rep(efficiency_ratio.2o,length(sI_efficiency_plot)),
+                      tI = NA, av_search = NA)
+
+df_efficiency.2o$tI <- df_efficiency.2o$sI / df_efficiency.2o$efficiency_ratio
+
+
+
+pb <- qpb(df_efficiency.2o)
+
+for (i in 1:nrow(df_efficiency.2o)) {
+  df_efficiency.2o[i,]$av_search <- model.2o(sI = df_efficiency.2o$sI[i],
+                                       tI = df_efficiency.2o$tI[i],
+                                       rho = rho_efficiencies, 
+                                       sF = sF, 
+                                       rS = rS,
+                                       resolution = resolution.2o)
+  
+  upb(pb,i)
+}
+# df_efficiency.2o
+
+```
+
+
+```{r}
+# write.csv(df_efficiency.2o, "output/df_efficiency_2o.csv")
+```
+
+
+```{r}
+df_efficiency.2o$sI <- as.factor(df_efficiency.2o$sI)
+df_efficiency.2o$sI  <- factor(df_efficiency.2o$sI , levels =  rev(as.factor(sI_efficiency_plot)))
+
+pl_efficiency.2o <- plot_meta_efficiency(df_efficiency.2o, "2o") 
+pl_efficiency.2o <- pl_efficiency.2o + ggtitle("Second-Order") + theme(plot.title = element_text(size = base_size*.8, face = "bold"))
+pl_efficiency.2o + theme(legend.position = "bottom")
+```
+
+
+## Confidence distribution plots
+
+```{r}
+sI_vec_cI_distrib <- rev(c(1,2,5))
+tI_vec_cI_distrib <- rev(c(1,2,10))
+# sI_fix_cI_distrib <- 2
+```
+
+### First-order
+
+```{r setup, include=FALSE}
+pl_cI_dist.Fo_1 <- plot_cI_distribution("Pd", sI = sI_vec_cI_distrib[1],
+                             tI = Inf,
+                             sF = sF,
+                             rS = -.1)
+pl_cI_dist.Fo_1
+
+
+pl_cI_dist.Fo_2 <- plot_cI_distribution("Pd",sI = sI_vec_cI_distrib[2],
+                             tI = Inf,
+                             sF = sF,
+                             rS = -.1)
+pl_cI_dist.Fo_2
+
+pl_cI_dist.Fo_3 <- plot_cI_distribution("Pd",sI = sI_vec_cI_distrib[3],
+                             tI = Inf,
+                             sF = sF,
+                             rS = -.1)
+pl_cI_dist.Fo_3
+```
+
+```{r, fig.width=12, fig.height=3 }
+pls_cI_dist.Fo <- pl_cI_dist.Fo_1 | pl_cI_dist.Fo_2 | pl_cI_dist.Fo_3 
+pls_cI_dist.Fo 
+```
+
+### Postdecisional
+
+```{r}
+sI_for_pd_confdis <- 2
+
+pl_cI_dist.Pd_1 <- plot_cI_distribution("Pd",sI = sI_for_pd_confdis,
+                             tI = tI_vec_cI_distrib[1],
+                             sF = sF,
+                             rS = -.1)
+
+pl_cI_dist.Pd_2 <- plot_cI_distribution("Pd",sI = sI_for_pd_confdis,
+                             tI = tI_vec_cI_distrib[2],
+                             sF = sF,
+                             rS = -.1)
+
+pl_cI_dist.Pd_3 <- plot_cI_distribution("Pd",sI = sI_for_pd_confdis,
+                             tI = tI_vec_cI_distrib[3],
+                             sF = sF,
+                             rS = -.1)
+```
+
+
+```{r, fig.width=12, fig.height=3 }
+pls_cI_dist.Pd <- pl_cI_dist.Pd_1 | pl_cI_dist.Pd_2 | pl_cI_dist.Pd_3 
+pls_cI_dist.Pd 
+```
+
+
+```{r,fig.width=12, fig.height=6 }
+pls_cI_dist.FoPd <- pls_cI_dist.Fo / pls_cI_dist.Pd
+pls_cI_dist.FoPd
+```
+
+```{r,fig.width=16, fig.height=6 }
+set_margin <- 0.65
+
+pls_cI_dist.FoPd_eff <- pl_efficiency.Pd + ggtitle("")| pls_cI_dist.FoPd
+pls_cI_dist.FoPd_eff <- pls_cI_dist.FoPd_eff + plot_layout(widths = c(1,2.2)) & theme(plot.margin = margin(set_margin,set_margin,set_margin,set_margin,"cm"))
+pls_cI_dist.FoPd_eff
+```
+
+
+### Second-order 
+
+```{r}
+rho_cI_distributions <- .5
+
+tI_vec_cI_distrib_2o <- c(3,sI_for_pd_confdis,1)
+pl_cI_dist.2o_1 <- plot_cI_distribution("2o",
+                                        sI_for_pd_confdis,
+                                        tI_vec_cI_distrib_2o[1],
+                                        rho_cI_distributions,sF,rS)
+pl_cI_dist.2o_1
+
+pl_cI_dist.2o_2 <- plot_cI_distribution("2o",
+                                        sI_for_pd_confdis,
+                                        tI_vec_cI_distrib_2o[2],
+                                        rho_cI_distributions,
+                                        sF,
+                                        rS)
+pl_cI_dist.2o_2
+
+pl_cI_dist.2o_3 <- plot_cI_distribution("2o",
+                                        sI_for_pd_confdis,
+                                        tI_vec_cI_distrib_2o[3],
+                                        rho_cI_distributions,
+                                        sF,
+                                        rS)
+pl_cI_dist.2o_3
+```
+
+
+```{r, fig.width=12, fig.height=3 }
+pls_cI_dist.2o_row1 <- pl_cI_dist.2o_1 + pl_cI_dist.2o_2 + pl_cI_dist.2o_3
+pls_cI_dist.2o_row1
+```
+
+```{r}
+sI_smaller_2o <- 1
+
+pl_cI_dist.2o_4 <- plot_cI_distribution("2o",
+                                        sI_smaller_2o,
+                                        tI = 2,
+                                        rho_cI_distributions,
+                                        sF,
+                                        rS)
+pl_cI_dist.2o_4
+
+pl_cI_dist.2o_5 <- plot_cI_distribution("2o",sI_smaller_2o,
+                                        tI = 1.3,
+                                        rho_cI_distributions,
+                                        sF,
+                                        rS)
+pl_cI_dist.2o_5
+
+```
+
+```{r, fig.width=12, fig.height=3 }
+pls_cI_dist.2o_row2 <- pl_cI_dist.2o_4 + pl_cI_dist.2o_5 + plot_spacer()
+pls_cI_dist.2o_row2
+```
+
+```{r,fig.width=12, fig.height=6 }
+pls_2o_dis <- pls_cI_dist.2o_row1 / pls_cI_dist.2o_row2
+pls_2o_dis
+```
+
+```{r,fig.width=16, fig.height=6 }
+pls_cI_dist.2o_eff <- (pl_efficiency.2o + ggtitle("") + guides(colour = "none") | pls_2o_dis)
+pls_cI_dist.2o_eff <- pls_cI_dist.2o_eff + plot_layout(widths = c(1,2.2)) & theme(plot.margin = margin(set_margin,set_margin,set_margin,set_margin,"cm"))
+pls_cI_dist.2o_eff
+```
+
+
+```{r,fig.width=16, fig.height=12}
+pls_efficiency <- pls_cI_dist.FoPd_eff / pls_cI_dist.2o_eff
+pls_efficiency
+```
+
+
+
+### Saving the plots
+
+```{r}
+ggsave(file = "output/MetaSearch_efficiency.pdf",
+       plot = pls_efficiency,
+       device = cairo_pdf,
+       width = 16,
+       height = 12,
+       units = "in",
+       dpi = 300)
+```
+
+To build the whole figure, we also need to save one of the plots with the sigma_I scale
+
+```{r}
+pl_efficiency_helper <- pl_efficiency.2o + theme(legend.position = "bottom")
+pl_efficiency_helper
+```
+
+```{r}
+ggsave(file = "output/MetaSearch_efficiency_helper.pdf",
+       plot = pl_efficiency_helper,
+       device = cairo_pdf,
+       units = "in",
+       dpi = 300)
+```
+
+
+
+# Figure 7: Final accuracy plots
+
+## Postdecisional model
+
+### Gaussian for visualisation
+
+
+```{r}
+afexplain_res <- 500
+
+afexplain_interval <- 7
+afexplain_x <- seq(-afexplain_interval,
+         afexplain_interval,
+         length.out = afexplain_res)
+
+dens <- dnorm(afexplain_x,1,2)
+
+
+seek_for_af <- rep(c("s0","s1","s0"), 
+                   times = c(afexplain_res*.4,afexplain_res*.2,
+                             afexplain_res*.4))
+
+correctness <- rep(c("incorrect_noseek","incorrect_seek","correct_seek","correct_noseek"),
+                   times = c(afexplain_res*.4,afexplain_res*.1,
+                             afexplain_res*.1,afexplain_res*.4))
+
+afexplain_df <- data.frame(x = afexplain_x,
+                           dens,
+                           seek_for_af)
+
+
+length_palette <- 8
+blues <- brewer.pal(n = length_palette, name = "Blues")
+
+# afexplain_df$correctness <- as.factor(afexplain_df$correctness)
+# 
+# afexplain_df$correctness <- factor(afexplain_df$correctness, 
+#                                    levels = c("incorrect_noseek","incorrect_seek",
+#                                               "correct_seek","correct_noseek"))
+
+pl_gaussian <- ggplot(afexplain_df, aes(x,dens,fill = seek_for_af)) +
+  geom_area() +
+  geom_vline(xintercept = 0, size =1) +
+  theme(axis.title.y = element_blank(),
+        axis.line.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  xlab(bquote(Z[I])) +
+  scale_y_continuous(limits = c(-.1, max(afexplain_df$dens) + .1)) +
+  scale_fill_manual(values = c(blues[6], palette_s1_corr[1])) +
+  guides(fill = "none")
+
+pl_gaussian
+```
+
+### Actual figure
+
+```{r}
+# subsetting the graph to show only one line for the with-seeking accuracy
+# these do end up overlapping anyway
+df_stats.Pd_subset <-  df_stats.Pd[df_stats.Pd$tI == 2,]
+
+pl_aF_accuracy.Pd <- ggplot(df_stats.Pd,aes(x = av_accuracy, y = av_accuracy_s0, colour = as.factor(tI))) + 
+                  geom_line(size = lsize) + geom_point(size = psize) +
+                  scale_color_manual(values = palette_5taus,
+                                     labels = rev(labels_tauI)) + 
+                  labs(x = axis_name_initial_acc, y = "Final Acc.", color = bquote(tau["I"])) +
+                  geom_line(data = df_stats.Pd_subset[,], 
+                            aes(x = av_accuracy, y = av_accuracy_s1), 
+                            colour =palette_s1_corr[1], 
+                            size = lsize) +
+                  geom_point(data = df_stats.Pd_subset, aes(x = av_accuracy, y = av_accuracy_s1), colour =palette_s1_corr[1], size = psize, shape = shape_s1_corr,
+                             ) +
+                  scale_y_continuous(limits = c(.75,1), breaks = c(.8,.9,1)) 
+  
+pl_aF_accuracy.Pd  
+```
+
+
+### Second-order figure
+
+We first write a figure that plots the final accuracy for the second-order model:
+
+```{r}
+plot_aF_accuracies.2o <- function(df){
+  ggplot(df,aes(x = av_accuracy, y = av_accuracy_s0, color = as.factor(tI))) + 
+  geom_path(size = lsize) +geom_point(size = psize) + 
+  scale_color_manual(values = rev(palette_5taus[1:5]), name = "tI") +
+  linepoint(df, "tI", lsize, psize) +
+  new_scale_color() + 
+  geom_line(data = df, aes(x = av_accuracy, y = av_accuracy_s1, colour = as.factor(tI)), size = lsize) +
+  geom_point(data = df, aes(x = av_accuracy, y = av_accuracy_s1, colour = as.factor(tI)), size = psize) +
+  scale_color_manual(values = rev(palette_s1_corr)) + 
+  scale_y_continuous(limits = c(.75,1), breaks = c(.8,.9,1)) +
+  labs(x = axis_name_initial_acc, y = "Final Acc.", color = bquote(tau["I"]))
+}
+```
+
+```{r}
+pl_aF_accuracy.2o_1 <- plot_aF_accuracies.2o(df_stats.2o_1)
+pl_aF_accuracy.2o_2 <- plot_aF_accuracies.2o(df_stats.2o_2)
+
+
+pl_aF_accuracy.2o_1
+pl_aF_accuracy.2o_2
+```
+
+
+## Putting the figures together
+
+
+
+```{r, fig.width=18, fig.height = 9.5}
+pl_final_acc_full <- pl_gaussian  +  plot_spacer() + pl_aF_accuracy.Pd + pl_aF_accuracy.2o_1 + pl_aF_accuracy.2o_2 +  
+  plot_layout(ncol = 3, guides = "collect")
+pl_final_acc_full
+```
+
+We save this
+
+```{r}
+ggsave(file = "output/MetaSearch_final_acc.pdf",
+        plot = pl_final_acc_full,
+       device = cairo_pdf,
+       width = 18,
+       height = 9.5,
+       units = "in",
+       dpi = 300)
+```
+
+
+
+## Results for appendix: higher rho's
+
+We first get these plots
+
+```{r}
+pl_av_search.2o_3 <- plot_av_search.2o(df_stats.2o_3)
+pl_av_search.2o_3
+```
+
+
+```{r}
+pl_aF_accuracy.2o_3 <- plot_aF_accuracies.2o(df_stats.2o_3)
+pl_aF_accuracy.2o_3
+```
+
+
+```{r, fig.width = 17, fig.height = 4.75}
+pl_av_search.2o_1 + pl_av_search.2o_2 + pl_av_search.2o_3
+```
+
+
+```{r, fig.width = 13, fig.height = 4.75}
+pls_high_rho_appendix <- pl_av_search.2o_3 + pl_aF_accuracy.2o_3 
+pls_high_rho_appendix
+```
+
+
+```{r}
+ggsave(file = "output/MetaSearch_high_rho_appendix.pdf",
+        plot = pls_high_rho_appendix,
+       device = cairo_pdf,
+       width = 13,
+       height = 4.75,
+       units = "in",
+       dpi = 300)
+```

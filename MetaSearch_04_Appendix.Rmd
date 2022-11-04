@@ -1,0 +1,462 @@
+---
+title: "Results"
+author: "Lion Schulz"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Notebook purpose
+
+This notebook contains the code for the appendix
+
+```{r}
+source("backend/global_all.R")
+```
+
+# Confidence plot
+
+## Set-up
+
+```{r}
+resolution_plots <- 100 # resolution for confidence plot
+YI_vector <- seq(-10,10,length.out = resolution_plots) # creating x-grid
+```
+
+
+
+## As a function of $\sigma_I$
+
+```{r}
+sI_vector <- seq(1,5,by = .1) # setting different rhos
+
+df_cI_sI <- expand.grid.df(YI_vector,as.factor(sI_vector),
+                                 col_names = c("YI","sI"))
+df_cI_sI$ci <- NA
+```
+
+```{r}
+tI_fix <- 2
+rho_fix <- .5
+
+# Go through all the different rhos and compute confidence vectors for each
+for (sI_temp in sI_vector){
+
+  ci_vector <- cI.2o(YI = YI_vector,
+                      sI = sI_temp,
+                      tI = tI_fix,
+                      rho = rho_fix,
+                      a = 1) 
+  
+  # adding it to the dataframe
+  df_cI_sI[which(df_cI_sI$sI == sI_temp),]$ci <- ci_vector
+}
+```
+
+
+```{r}
+# We first pick a colourscheme
+palette_many_sI <- sequential_hcl(length(sI_vector)*1.3, "SunsetDark", rev = T)
+palette_many_sI <- palette_many_sI[(length(palette_many_sI)-length(sI_vector)):length(palette_many_sI)] # we need to subset it to get along
+
+df_subset_sI <- df_cI_sI[df_cI_sI$sI == 2,] # used to highlight the same confidence in the the 
+
+
+pl_cI_by_sI <- ggplot(df_cI_sI,aes(YI,ci, colour = sI)) + 
+                      geom_vline(xintercept = 0) +                     
+                      geom_line(size = lsize) +
+                      scale_y_continuous(name = bquote(c[I]),
+                                         limits = c(0,1),
+                                         breaks = c(0,.5,1)) +
+                      scale_x_continuous(name = bquote(Y[I])) +
+                      scale_color_manual(values = palette_many_sI) +
+                      guides(colour = "none") +
+                      geom_line(data = df_subset_sI,
+                                aes(YI,ci),
+                                colour = "grey", size = lsize)
+
+pl_cI_by_sI
+```
+
+## As a function of $\tau_I$
+
+
+```{r}
+tI_vector <- seq(1,5,by = .1) # setting different rhos
+
+df_cI_tI <- expand.grid.df(YI_vector,as.factor(tI_vector),
+                                 col_names = c("YI","tI"))
+df_cI_tI$ci <- NA
+```
+
+```{r}
+sI_fix <- 2
+rho_fix <- .5
+
+# Go through all the different rhos and compute confidence vectors for each
+for (tI_temp in tI_vector){
+
+  ci_vector <- cI.2o(YI = YI_vector,
+                      sI = sI_fix,
+                      tI = tI_temp,
+                      rho = rho_fix,
+                      a = 1) 
+  
+  # adding it to the dataframe
+  df_cI_tI[which(df_cI_tI$tI == tI_temp),]$ci <- ci_vector
+}
+```
+
+
+```{r}
+# We first pick a colourscheme
+palette_many_tI <- sequential_hcl(length(tI_vector)*1.3, "Blues 3", rev = T)
+palette_many_tI <- palette_many_tI[(length(palette_many_tI)-length(tI_vector)):length(palette_many_tI)] # we need to subset it to get along
+
+
+pl_cI_by_tI <- ggplot(df_cI_tI,aes(YI,ci, colour = tI)) + 
+                      geom_vline(xintercept = 0) +                     
+                      geom_line(size = lsize) +
+                      scale_y_continuous(name = bquote(c[I]),
+                                         limits = c(0,1),
+                                         breaks = c(0,.5,1)) +
+                      scale_x_continuous(name = bquote(Y[I])) +
+                      scale_color_manual(values = palette_many_tI) +
+                      guides(colour = "none") +        
+                      geom_line(data = df_subset_sI,
+                                aes(YI,ci),
+                                colour = "grey", 
+                                size = lsize) +
+  theme(axis.title.y = element_blank())
+pl_cI_by_tI
+```
+
+
+## As a function of $rho_I$
+
+```{r}
+rho_vector <- seq(0.00,.95, by = .03) # setting different rhos
+
+df_cI_by_rho <- expand.grid.df(YI_vector,as.factor(rho_vector),
+                                 col_names = c("YI","rho"))
+df_cI_by_rho$ci <- NA
+```
+
+
+```{r}
+sI_fix <- 1.5
+tI_fix <- 2
+
+# Go through all the different rhos and compute confidence vectors for each
+for (rho_temp in rho_vector){
+  
+  ci_vector <- cI.2o(YI = YI_vector,
+                      sI = sI_fix,
+                      tI = tI_fix,
+                      rho = rho_temp,
+                      a = 1) 
+  
+  # adding it to the dataframe
+  df_cI_by_rho[which(df_cI_by_rho$rho == rho_temp),]$ci <- ci_vector
+}
+```
+
+
+```{r}
+pl_cI_by_rho <- ggplot(df_cI_by_rho,aes(YI,ci, colour = rho)) + 
+                      geom_vline(xintercept = 0) +                    
+                      geom_line(size = lsize) +
+                      scale_y_continuous(name = bquote(c[I]),
+                                         limits = c(0,1),
+                                         breaks = c(0,.5,1)) +
+                      scale_x_continuous(name = bquote(Y[I])) +
+                      scale_color_viridis_d(direction = -1) +
+                      guides(colour = "none") +
+theme(axis.title.y = element_blank())
+pl_cI_by_rho
+```
+
+
+
+## Posterior slopes
+
+
+```{r}
+# This function defines the slope when P(1|X,Y) = P(-1|X,Y)
+posteriorequality <- function(sI,tI,rho){
+  
+  num <- sI^(-2) - rho/(sI*tI)
+  num
+  denom <- tI^(-2) - rho/(sI*tI)
+  denom
+  
+  slope <- -num/denom
+  return(slope)
+}
+```
+
+
+### By $\sIgma_I$
+
+
+```{r}
+df_posterior_line_sI <- expand.grid.df(YI_vector,as.factor(sI_vector),
+                                 col_names = c("XI","sI"))
+df_posterior_line_sI$YI <- NA
+
+for (sI_temp in sI_vector){
+  
+  slope_temp <-  posteriorequality(sI_temp,
+                                   tI_fix,
+                                   rho_fix)
+  
+  # forcing the vertical slope
+  if (slope_temp %in% c(-Inf,Inf)) {
+    slope_temp <- 10e3
+  }
+  
+  
+  # adding it to the dataframe
+  df_posterior_line_sI[which(df_posterior_line_sI$sI == sI_temp),]$YI <- 
+    df_posterior_line_sI[which(df_posterior_line_sI$sI == sI_temp),]$XI*slope_temp
+}
+```
+
+
+
+```{r}
+pl_posterior_line_by_sI <- ggplot(df_posterior_line_sI,aes(XI,YI, colour = sI)) + 
+                            geom_line(size = lsize) +
+                            scale_y_continuous(name = bquote(Y[I])) +
+                            scale_x_continuous(name = bquote(X[I])) +
+                            scale_color_manual(values = palette_many_sI) +
+                            coord_cartesian(xlim = c(-10,10),
+                                            ylim = c(-10,10)) + 
+  guides(colour = "none")
+pl_posterior_line_by_sI
+```
+
+
+## By $\tau_I$
+
+```{r}
+df_posterior_line_tI <- expand.grid.df(YI_vector,as.factor(tI_vector),
+                                 col_names = c("XI","tI"))
+df_posterior_line_tI$YI <- NA
+
+for (tI_temp in tI_vector){
+  
+  slope_temp <-  posteriorequality(sI_fix,
+                                   tI_temp,
+                                   rho_fix)
+  
+    # forccing the vertical slope
+  if (slope_temp %in% c(-Inf,Inf)) {
+    slope_temp <- 10e3
+  }
+  
+  # adding it to the dataframe
+  df_posterior_line_tI[which(df_posterior_line_tI$tI == tI_temp),]$YI <- 
+    df_posterior_line_tI[which(df_posterior_line_tI$tI == tI_temp),]$XI*slope_temp
+}
+```
+
+
+And do the plotting
+
+```{r}
+pl_posterior_line_by_tI <- ggplot(df_posterior_line_tI,aes(XI,YI, colour = tI)) + 
+                            geom_line(size = lsize) +
+                            scale_y_continuous(name = bquote(Y[I])) +
+                            scale_x_continuous(name = bquote(X[I])) +
+                            scale_color_manual(values = palette_many_tI) +
+                            coord_cartesian(xlim = c(-10,10),
+                                            ylim = c(-10,10)) + 
+                           guides(colour = "none") +
+  theme(axis.title.y = element_blank())
+pl_posterior_line_by_tI
+```
+
+
+### By $\rho_I$
+
+
+
+```{r}
+df_posterior_line_rho <- expand.grid.df(YI_vector,as.factor(rho_vector),
+                                 col_names = c("XI","rho"))
+df_posterior_line_rho$YI <- NA
+
+for (rho_temp in rho_vector){
+  
+  slope_temp <-  posteriorequality(sI_fix,
+                                   tI_fix,
+                                   rho_temp)
+  
+  if (slope_temp %in% c(-Inf,Inf)) {
+    slope_temp <- -1000
+  }
+  
+  # adding it to the dataframe
+  df_posterior_line_rho[which(df_posterior_line_rho$rho == rho_temp),]$YI <- 
+    df_posterior_line_rho[which(df_posterior_line_rho$rho == rho_temp),]$XI*slope_temp
+}
+```
+
+
+And do the plotting
+
+```{r}
+pl_posterior_line_by_rho <- ggplot(df_posterior_line_rho,aes(XI,YI, colour = rho)) + 
+                            geom_line(size = lsize) +
+                            scale_y_continuous(name = bquote(Y[I])) +
+                            scale_x_continuous(name = bquote(X[I])) +
+                            scale_color_viridis_d(direction = -1) +
+                            coord_cartesian(xlim = c(-10,10),
+                                            ylim = c(-10,10)) +   guides(colour = "none") +
+theme(axis.title.y = element_blank())
+pl_posterior_line_by_rho
+```
+
+## First plot together
+
+```{r, fig.width=17, fig.height = 10.5}
+pl_app_confidence <- pl_cI_by_sI + pl_cI_by_tI + pl_cI_by_rho + 
+  pl_posterior_line_by_sI + pl_posterior_line_by_tI + pl_posterior_line_by_rho 
+  plot_layout(guides = "collect")
+  
+pl_app_confidence
+```
+
+
+```{r}
+ggsave(file = "output/MetaSearch_app_confidence.pdf",
+       plot = pl_app_confidence,
+       device = cairo_pdf,
+       width = 17,
+       height = 10.5,
+       units = "in",
+       dpi = 300)
+```
+
+
+# Cue-combination for the final confidence
+
+First, we build a function that gets us the joint standard deviation
+
+```{r}
+zetaI.2o <- function(sI,tI,rho){
+  zetaI <- cue_combination.2o(sI,tI,rho)$zetaI
+}
+```
+
+
+## Varying $\tau_I$ and $\rho_I$
+
+Plotting zeta for a fixed value of tau_I and varying sigma_I - first get the data
+
+```{r}
+# we define a range of sigma_I and a tau_I for this plot
+sI_vector_zetaI <- seq(.75,5,.01)
+tI_vector_zetaI <- c(1,2,4)
+rho_vector_zetaI <- seq(0,1, by = .10)[1:10]
+
+df_zetaI_vis <- expand.grid.df(sI_vector_zetaI,
+                               tI_vector_zetaI,
+                               rho_vector_zetaI,
+                               col_names = c("sI","ti", "rho"))
+
+df_zetaI_vis$zetaI <- zetaI.2o(df_zetaI_vis$sI,
+                                df_zetaI_vis$ti,
+                                df_zetaI_vis$rho)
+
+df_zetaI_vis$rho <- as.factor(df_zetaI_vis$rho)
+df_zetaI_vis$ti <- as.factor(df_zetaI_vis$ti)
+```
+
+```{r}
+# function that translates standard deviation into accuracy
+phi <- function(sd){
+  pnorm(0,-1,sd)
+}
+
+df_zetaI_vis$phi_sI <-  phi(df_zetaI_vis$sI)
+df_zetaI_vis$phi_zetaI <-  phi(df_zetaI_vis$zetaI)
+```
+
+```{r, fig.width=11, fig.height = 5}
+axis_name_phi_zeta <- bquote(phi *"("*zeta["I"]*")")
+
+pl_2o_zetaI_by_rho_phi <- ggplot(df_zetaI_vis,aes(phi_sI,phi_zetaI, colour = rho)) + 
+                        geom_line(size = lsize) +
+                        scale_y_continuous(name = axis_name_phi_zeta) +
+                        scale_x_continuous(name = axis_name_initial_acc) +
+                        scale_color_viridis_d(direction = -1) +
+                        facet_wrap(.~ti,strip.position = "top")
+pl_2o_zetaI_by_rho_phi
+```
+
+
+## As a function of $\tau_I$ and $\rho_I$ 
+
+```{r}
+# we define a range of sigma_I and a tau_I for this plot
+tI_zetaI_vis <- seq(1,5,by = .5)
+
+rhos_for_tI_zetaI_vis <- c(.2,.5,.8)
+
+df_zetaI_vis_by_tI <- expand.grid.df(sI_vector_zetaI,
+                               tI_zetaI_vis,
+                               rhos_for_tI_zetaI_vis,
+                               col_names = c("sI","tI", "rho"))
+
+df_zetaI_vis_by_tI$zetaI <- zetaI.2o(df_zetaI_vis_by_tI$sI,
+                                df_zetaI_vis_by_tI$tI,
+                                df_zetaI_vis_by_tI$rho)
+
+df_zetaI_vis_by_tI$tI <- as.factor(df_zetaI_vis_by_tI$tI)
+df_zetaI_vis_by_tI$rho <- as.factor(df_zetaI_vis_by_tI$rho)
+```
+
+
+
+```{r}
+df_zetaI_vis_by_tI$phi_sI <-  phi(df_zetaI_vis_by_tI$sI)
+df_zetaI_vis_by_tI$phi_zetaI <-  phi(df_zetaI_vis_by_tI$zetaI)
+```
+
+
+```{r, fig.width=11, fig.height = 4.5}
+palette_few_tI <- sequential_hcl(length(tI_zetaI_vis)*1.3, "Blues 3", rev = T)
+length(palette_few_tI)
+palette_few_tI <- palette_few_tI[(length(palette_few_tI)-length(tI_zetaI_vis)):length(palette_few_tI)] # we need to subset it to get along
+length(palette_few_tI)
+
+
+pl_2o_zetaI_by_tI_phi <- ggplot(df_zetaI_vis_by_tI,aes(phi_sI,phi_zetaI, colour = tI)) + 
+                        geom_line(size = lsize) +
+                        scale_y_continuous(name = axis_name_phi_zeta, limits = c(.6,1)) +
+                        scale_x_continuous(name = axis_name_initial_acc) +
+                        scale_color_manual(values = palette_few_tI) + 
+                        facet_wrap(.~rho)
+pl_2o_zetaI_by_tI_phi
+```
+
+
+## Joining the two together
+
+```{r, fig.width=11, fig.height = 10}
+pl_zetaI_large <- pl_2o_zetaI_by_rho_phi + pl_2o_zetaI_by_tI_phi + plot_layout(ncol = 1) & guides(colour = "none")
+pl_zetaI_large
+```
+
+```{r}
+ggsave(file = "output/MetaSearch_app_zeta.pdf",
+       plot = pl_zetaI_large,
+       device = cairo_pdf,
+       width = 11,
+       height = 10,
+       units = "in",
+       dpi = 300)
+```
+

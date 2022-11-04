@@ -1,0 +1,501 @@
+---
+title: "Introduction"
+author: "Lion Schulz"
+output: html_notebook
+---
+
+# Notebook purpose
+
+This notebook contains the code for the computations part.
+
+# Set-up
+
+We load the back-end
+
+```{r}
+source("backend/global_all.R")
+```
+
+# Figure 1: Distributions
+
+We set some parameters
+
+
+
+
+## Postdecisional Figure
+
+```{r}
+# Set-up
+resolution_fig1 <- 100
+sigint <- c(-10,10)
+XI_vector <- seq(from = sigint[1], to = sigint[2], length.out =  resolution_fig1)
+YI_vector <- XI_vector
+
+# Postdecisional figure
+sI_fig1.Pd <- 2
+tI_fig1.Pd <- 1.5
+rho.Pd <- 0
+
+Sigma_I.Pd <- computeCov(sI_fig1.Pd,tI_fig1.Pd,rho.Pd)
+XIYI_matrix <- expand.grid(XI_vector,YI_vector)
+density_XIYI_matrix <- matrix(dmvnorm(XIYI_matrix,mean = c(1,1),sigma = Sigma_I.Pd),nrow = length(XI_vector))
+
+df_2o_Isource <- melt(density_XIYI_matrix)
+df_2o_Isource$XI <- XI_vector[df_2o_Isource$Var1]
+df_2o_Isource$XF <- YI_vector[df_2o_Isource$Var2]
+```
+
+
+```{r}
+# Setting for the figure
+fig1_xy_breaks_distributions <- c(-5,0,5) 
+distribution_lsize <- 2
+distribution_alpha <- .7
+# deliniating the seeking polygon
+dpoly <- data.frame(x = c(4.25,5.75,-5,-5), y = c(-5,-5,5.75,4.25))
+
+
+# Figure
+pl_distribution.Pd <- ggplot(df_2o_Isource, aes(x = XI, y = XF)) + 
+  geom_polygon(data = dpoly, aes(x = x, y = y),
+               fill = "grey") + 
+  geom_contour(data = df_2o_Isource,
+               aes(x = XI, y = XF, z=value), colour = "black",
+               size = distribution_lsize -.5,
+               alpha = distribution_alpha) + 
+  labs(x=bquote(X["I"]), y=bquote(Y["I"])) +
+  coord_cartesian(xlim = c(-5,5), ylim = c(-5,5)) +
+  scale_x_continuous(breaks = fig1_xy_breaks_distributions,
+                     labels = scales::number_format(accuracy = 0.1)) +
+  scale_y_continuous(breaks = fig1_xy_breaks_distributions,
+                     labels = scales::number_format(accuracy = 0.1))
+pl_distribution.Pd
+```
+
+# Second order figure
+
+```{r}
+sI_fig1.2o <- 2
+tI_fig1.2o <- 1.5
+roh_distribution.2o <- .7
+
+Sigma_I <- computeCov(sI_fig1.2o,tI_fig1.2o,roh_distribution.2o)
+density_XIYI_matrix <- matrix(dmvnorm(XIYI_matrix,mean = c(1,1),sigma = Sigma_I),nrow = length(XI_vector))
+
+df_2o_Isource <- melt(density_XIYI_matrix)
+df_2o_Isource$XI <- XI_vector[df_2o_Isource$Var1]
+df_2o_Isource$XF <- YI_vector[df_2o_Isource$Var2]
+
+## and with the seeking zone
+pl_distribution.2o <- ggplot(df_2o_Isource, aes(x = XI, y = XF)) + 
+  geom_rect(xmin = -5,
+            xmax = 0,
+            ymin = -.75,
+            ymax = .25,
+            fill = "grey") +
+  geom_rect(xmin = 0,
+            xmax = 5,
+            ymin = -.25,
+            ymax = .75,
+            fill = "grey") +
+  geom_contour(data = df_2o_Isource,
+               aes(x = XI, y = XF, z=value), colour = "black",
+               size = distribution_lsize -.5,
+               alpha = distribution_alpha) + labs(x=bquote(X["I"]), y=bquote(Y["I"])) +
+  coord_cartesian(xlim = c(-5,5), ylim = c(-5,5)) +
+  scale_x_continuous(breaks = fig1_xy_breaks_distributions,
+                     labels = scales::number_format(accuracy = 0.1)) +
+  scale_y_continuous(breaks = fig1_xy_breaks_distributions,
+                     labels = scales::number_format(accuracy = 0.1)) 
+pl_distribution.2o
+```
+
+```{r}
+vertical_line_size <- 1
+pls_distributions <- pl_distribution.Pd + pl_distribution.2o & geom_vline(xintercept = 0, size =vertical_line_size)
+pls_distributions
+```
+
+
+# Confidences
+
+## Postdecisional confidence
+
+```{r}
+zetaI.Pd <- 2
+
+cI.Pd_plus <- sigmoid(2*XI_vector/zetaI.Pd^2)
+cI.Pd_minus <- 1 - cI.Pd_plus
+```
+
+```{r}
+df_cI.Pd <- data.frame(ZI = XI_vector,
+                       cI_plus = cI.Pd_plus,
+                       cI_minus = cI.Pd_minus)
+df_cI.Pd <- melt(df_cI.Pd, id.vars = "ZI")
+```
+
+```{r}
+confidence_breaks <- c(0,.5,1)
+
+confidence_lsize <- 2
+
+plot_pd_conf <- ggplot(df_cI.Pd, aes(x = ZI, y = value, colour = variable)) + 
+  geom_line(size = confidence_lsize) +
+  coord_cartesian(xlim = c(-5,5), ylim = c(0,1)) +
+  scale_x_continuous(breaks = fig1_xy_breaks_distributions,
+                     name = bquote(Z[I]),
+                     labels = scales::number_format(accuracy = 0.1)) +
+  scale_y_continuous(breaks = confidence_breaks,
+                     name = "Confidence",
+                     labels = scales::number_format(accuracy = 0.1)) + 
+  geom_vline(xintercept = 0,
+             size = vertical_line_size) +
+  geom_hline(yintercept = .5,
+             linetype = "dashed",
+             size = vertical_line_size) +
+  scale_color_manual(values = palette_2ais) + guides(color = "none")
+plot_pd_conf
+```
+
+# 2nd order confidence
+
+Computing the confidence
+
+```{r}
+cI_2o_plus <- cI.2o(XI_vector,zetaI.Pd,zetaI.Pd,roh_distribution.2o,1)
+cI_2o_minus <- cI.2o (XI_vector,zetaI.Pd,zetaI.Pd,roh_distribution.2o,-1)
+```
+
+
+```{r}
+df_cI_2o <- data.frame(yi = XI_vector,
+                       cI_plus = cI_2o_plus,
+                       cI_minus = cI_2o_minus)
+df_cI_2o <- melt(df_cI_2o, id.vars = "yi")
+```
+
+Plotting
+
+```{r}
+plot_2o_conf <- ggplot(df_cI_2o, aes(x = yi, y = value, colour = variable)) + 
+  geom_line(size = confidence_lsize) +
+  coord_cartesian(xlim = c(-5,5), ylim = c(0,1)) +
+  scale_x_continuous(breaks = fig1_xy_breaks_distributions,
+                     name = bquote(Y[I]),
+                     labels = scales::number_format(accuracy = 0.1)) +
+  scale_y_continuous(breaks = confidence_breaks,
+                     name = "Confidence",
+                     labels = scales::number_format(accuracy = 0.1))  +
+  geom_vline(xintercept = 0,
+             size = vertical_line_size) +
+  geom_hline(yintercept = .5,
+             linetype = "dashed",
+             size = vertical_line_size) +
+  scale_color_manual(values = palette_2ais,
+                     name = "",
+                     labels = c(bquote(a[I]*" = 1"),
+                                bquote(a[I]*" = -1"))) +
+  guides(colour = "none")
+  
+plot_2o_conf
+```
+
+```{r, fig.width=9.5, fig.height=9}
+pls_fig1  <- pls_distributions / (plot_pd_conf | plot_2o_conf)
+pls_fig1 
+```
+
+
+
+```{r,width=20, fig.height=11}
+# ggsave(file = "output/MetaSearch_Fig1.svg", 
+#        plot = pls_fig1,
+#        width = 9.5, 
+#        height = 9,
+#        units = "in",
+#        dpi = 300)
+```
+
+
+
+
+
+
+
+
+
+
+# Figure 2: Computations
+
+## Parameters
+
+We set the basic parameters
+
+```{r}
+sI <- 1.5
+sF <- 1
+
+# building the grid 
+resolution <- 100
+x <- seq(from = -5, to = 5, length.out = resolution) 
+```
+
+## Posterior based on $Z_I$ and value of not seeking
+
+We first set this up
+
+```{r}
+df_ZIplot <- data.frame(XI = x)
+df_ZIplot$posterior_positive <- sigmoid(2*x/sI^2)
+df_ZIplot$posterior_negative <- 1-df_ZIplot$posterior_positive
+# plot(df_ZIplot$posterior_negative)
+
+# getting the maXImum
+df_ZIplot$Q0 <- df_ZIplot$posterior_positive
+df_ZIplot[which(df_ZIplot$Q0 < 0.5),]$Q0 <- 0.5 + abs(df_ZIplot[which(df_ZIplot$Q0 < 0.5),]$Q0 - .5)
+
+# plot(df_ZIplot$v)
+```
+
+
+```{r}
+pl_VandPosteriorAtI <- ggplot(data = df_ZIplot, aes(x = XI, y = Q0)) + 
+  geom_line(size = lsize_intro + 2,
+            colour = colour$Q0) +
+  geom_line(aes(x = XI, y = posterior_negative), 
+            size = lsize_intro,
+            colour = colour$posterior_ZI,
+            linetype = "dashed") +
+  geom_line(aes(x = XI, y = posterior_positive),
+            size = lsize_intro - .5,
+            colour = colour$posterior_ZI) +
+  scale_x_continuous(name=bquote(Z["I"]), breaks=c(-5,0,5),
+                     labels = scales::number_format(accuracy = 0.1)) +
+  scale_y_continuous(name=bquote("P(d|"*Z[I]*") and "*Q["S"]*"(0)"), 
+                     breaks=c(0,.5,1),
+                     labels = scales::number_format(accuracy = 0.1)) +
+  ggtitle(expression(bold("Posterior/Values from "*Z[I])))  
+pl_VandPosteriorAtI
+```
+
+
+## Posterior for $Z_F$
+
+```{r}
+XI <- x
+XF <- x
+
+scaleFUN <- function(x) sprintf("%.2f", x)
+
+
+zetaF2 <- 1/(1/(sI^2) + (1/sF^2))
+ZF <- outer(XI/sI^2,XF/sF^2, FUN = "+")*zetaF2
+ZFpost <- sigmoid(2*ZF/zetaF2)
+
+# image(ZF)
+# image(ZFpost)
+
+df_ZFpost <- melt(ZFpost)
+df_ZFpost$XI <- XI[df_ZFpost$Var1]
+df_ZFpost$XF <- XF[df_ZFpost$Var2]
+
+st_highcol <- "white"
+st_lowcol <- "black"
+
+
+pl_post <- ggplot(df_ZFpost, aes(x = XI, y = XF)) + 
+  geom_tile(aes(fill=value)) +
+  scale_fill_viridis_c(name = "Probability",
+                      limits = c(0,1),
+                      breaks = c(0,.5,1)) +
+  coord_cartesian(xlim = c(-5,5), ylim = c(-5,5)) +
+  scale_x_continuous(name=bquote(Z["I"]), breaks=c(-5,0,5),
+                     labels = scales::number_format(accuracy = 0.1)) +
+  scale_y_continuous(name=bquote(X["F"]), breaks=c(-5,0,5),
+                     labels = scales::number_format(accuracy = 0.1)) +
+  ggtitle(expression(bold("Posterior" ~ Z[F] * ": P(d=1|"*Z[F]*")"))) 
+pl_post
+```
+
+
+## Value for ZF
+
+```{r}
+value_ZF <- 0.5 + abs(ZFpost -.5)
+# image(df_ZFpost)
+df_value_ZF <- melt(value_ZF)
+df_value_ZF$XI <- XI[df_value_ZF$Var1]
+df_value_ZF$XF <- XF[df_value_ZF$Var2]
+
+pl_value_ZF <- ggplot(df_value_ZF, aes(x = XI, y = XF)) + 
+  geom_tile(aes(fill=value)) +
+  scale_fill_viridis_c(name = "Value",
+                       limits = c(0.5,1),
+                       breaks = c(.5,1),option = "magma") +
+  coord_cartesian(xlim = c(-5,5), ylim = c(-5,5)) +
+  scale_x_continuous(name=bquote(Z["I"]), breaks=c(-5,0,5),
+                     labels = scales::number_format(accuracy = 0.1)) +
+  scale_y_continuous(name=bquote(X["F"]), breaks=c(-5,0,5),
+                     labels = scales::number_format(accuracy = 0.1))+
+  ggtitle(expression(bold("Value of "*Z[F])))
+pl_value_ZF
+```
+
+
+## Predicting $X_F$
+
+```{r}
+p_XF <- dnorm(x,mean = 1,sd = sF)
+p_XF <- p_XF/sum(p_XF)
+p_XFb <- dnorm(x,mean = -1,sd = sF)
+p_XFb <- p_XFb/sum(p_XFb)
+
+pXFXI <- outer(df_ZIplot$posterior_positive,p_XF) + outer(df_ZIplot$posterior_negative,p_XFb)
+# image(pXFxI)
+
+df_XFdis <- melt(pXFXI)
+df_XFdis$xI <- XI[df_XFdis$Var1]
+df_XFdis$XF <- XF[df_XFdis$Var2]
+
+
+pl_XFXI <- ggplot(df_XFdis, aes(x = xI, y = XF)) + 
+            geom_tile(aes(fill=value)) +
+            scale_fill_viridis()+
+            coord_cartesian(xlim = c(-5,5), ylim = c(-5,5)) +
+            guides(fill=FALSE) +
+            scale_x_continuous(name=bquote(Z["I"]), breaks=c(-5,0,5),
+                     labels = scales::number_format(accuracy = 0.1)) +
+            scale_y_continuous(name=bquote(X["F"]), breaks=c(-5,0,5),
+                               labels = scales::number_format(accuracy = 0.1)) + 
+            ggtitle(expression(bold("p("*X[F]*"|"*Z[I]*")")))
+pl_XFXI
+```
+
+
+## Q-Values
+
+```{r}
+Q1 <- rowSums(pXFXI*value_ZF) 
+
+df_Qs <- data.frame(xI = x,
+                  Q0 = df_ZIplot$Q0,
+                  Q1_r0 = Q1,
+                  Q1_r1 = Q1 - .1,
+                  Q1_r2 = Q1 - .2, # adding different cost levels
+                  Q1_r2 = Q1 - .3)
+
+# getting this into a long dataframe
+df_Qs_long <- melt(df_Qs, id.vars = c("xI", "Q0"),
+                 value.name="Q1")
+
+# adapting the costs so they plot right
+df_Qs_long$Cost <- as.factor(rep(c(0, -.1,-.2,-.3), each = length(x)))
+df_Qs_long$Cost <- factor(df_Qs_long$Cost, levels = rev(levels(df_Qs_long$Cost)))
+```
+
+
+```{r,fig.width=6, fig.height=5.5}
+seekZone <- df_Qs$xI[which.min(df_Qs$diff)]
+
+
+# colour_QS0 <-  "grey"
+
+pl_Qs <- ggplot(data = df_Qs_long, aes(x = xI, y = Q1, colour = Cost)) + 
+        geom_line(aes(x = xI, y = Q0), 
+                            size = lsize_intro +1 , 
+                            colour = colour$Q0) +        
+          geom_line(size = lsize_intro + 1,) +
+          scale_x_continuous(name=bquote(Z["I"]), breaks=c(-5,0,5),
+                     labels = scales::number_format(accuracy = 0.1)) + 
+          scale_y_continuous(name=bquote(Q[S]*"("*s[I]*")"), 
+                             limits = c(.5,1),
+                             breaks = seq(.5,1,.1)) +
+          scale_color_manual(values = palette_4costs,
+                             name = bquote(r[S])) +
+          ggtitle("Q-Values") +
+          guides(colour = "none") # +
+          # annotate("text", x=1.8, y=.96, label= bquote(Q["S,0"]), 
+          #      size = size_annotate,
+          #      colour = colour$Q0) +
+          # annotate("text", x= -3.5, y=.6, label= bquote(Q["S,1"]), 
+          #    size = size_annotate,
+          #    colour = "orange") 
+
+
+pl_Qs
+```
+
+
+## Q-value difference
+
+```{r}
+df_Qs_long$diff <- abs(df_Qs_long$Q1 - df_Qs_long$Q0)
+df_Qs_long$diffreal <- df_Qs_long$Q1 - df_Qs_long$Q0
+df_Qs_long$cI <- sigmoid(2*df_Qs_long$xI/sI^2) 
+df_Qs_long_half <- df_Qs_long[df_Qs_long$xI > 0,]
+```
+
+
+```{r}
+pl_QdiffcI <- ggplot(data = df_Qs_long_half, aes(x = cI, y = diffreal, colour = Cost)) + 
+  geom_hline(yintercept = 0, size = lsize_intro)+
+  geom_line(size = lsize_intro + 1) +
+  ylab(bquote("Q"[S]*"(1) -"*"Q"[S]*"(0)")) +
+  xlab(bquote(c[I])) +
+  scale_x_continuous(breaks = c(.5, .7, .9)) +
+  scale_y_continuous(breaks = c(-.3,0,.3),
+                     limits = c(-.3,.35)) +
+  ggtitle("Q-Value difference") +
+          scale_color_manual(values = palette_4costs,
+                             name = bquote(r[S])) 
+pl_QdiffcI
+```
+
+
+```{r}
+softmax_temperature <- 20
+df_Qs_long_half$decision <- sigmoid(softmax_temperature * df_Qs_long_half$diffreal)
+
+
+pl_choice_prob <- ggplot(data = df_Qs_long_half, aes(x = cI, y = decision, colour = Cost)) + 
+  geom_hline(yintercept = 0, size = lsize_intro)+
+  geom_line(size = lsize_intro + 1) +
+  ylab(bquote("Q"[S]*"(1) -"*"Q"[S]*"(0)")) +
+  xlab(bquote(c[I])) +
+  scale_x_continuous(breaks = c(.5, .7, .9)) +
+  scale_color_manual(values = palette_4costs,
+                     name = bquote(r[S])) 
+  
+pl_choice_prob
+
+```
+
+
+## Full figure
+
+```{r, fig.width=20, fig.height=11}
+margin <- .3
+pl_fulls <- pl_VandPosteriorAtI +  pl_post + pl_value_ZF + pl_XFXI + pl_Qs + pl_QdiffcI +
+  plot_layout(ncol = 3, guides = 'collect')&
+  theme(plot.title = element_text(size = base_size*.85, face = "bold"),
+        plot.tag = element_text(size = base_size, face = "bold", vjust = -.2),
+        plot.margin = margin(margin,margin,margin,margin, unit = "cm"))
+pl_fulls
+```
+
+## Saving
+
+```{r,width=20, fig.height=11}
+# ggsave(file = "output/MetaSearch_Components.pdf", 
+#        plot = pl_fulls,
+#        device = cairo_pdf, 
+#        width = 20, 
+#        height = 11,
+#        units = "in",
+#        dpi = 300)
+```
+
+
+
